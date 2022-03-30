@@ -24,7 +24,7 @@ message WriteRequest {
 
 message Response {
   int32 return_code = 1;
-  int32 error_number = 2;
+  int32 error_code = 2;
   int32 primary = 3;
-  string data = 3;
+  string data = 4;
 }

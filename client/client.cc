@@ -16,89 +16,171 @@
  *
  */
 
+// standard c++
 #include <iostream>
-#include <memory>
+#include <sstream>
+#include <fstream>
+#include <iomanip>
 #include <string>
-
+#include <unordered_map>
+#include <chrono>
+// standard c
+#include <unistd.h>
+#include <stdlib.h> // malloc
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <dirent.h>
+#include <sys/stat.h>
+// openssl library
+#include <openssl/sha.h>
+// grpc library
 #include <grpcpp/grpcpp.h>
-
+// program's header
 #include "blockstore.grpc.pb.h"
 
 using grpc::Channel;
 using grpc::ClientContext;
+using grpc::ClientWriter;
+using grpc::ClientReader;
 using grpc::Status;
-using helloworld::Greeter;
-using helloworld::HelloReply;
-using helloworld::HelloRequest;
+using grpc::StatusCode;
+using namespace cs739;
 
-class GreeterClient {
- public:
-  GreeterClient(std::shared_ptr<Channel> channel)
-      : stub_(Greeter::NewStub(channel)) {}
+class RBSClient {
+  public:
+    RBSClient(std::shared_ptr<Channel> channel)
+      : stub_(RBS::NewStub(channel)) {}
 
-  // Assembles the client's payload, sends it and presents the response back
-  // from the server.
-  std::string SayHello(const std::string& user) {
-    // Data we are sending to the server.
-    HelloRequest request;
-    request.set_name(user);
+    int CheckPrimary() {
+        ClientContext context;
 
-    // Container for the data we expect from the server.
-    HelloReply reply;
+        CheckPrimaryRequest request;
 
-    // Context for the client. It could be used to convey extra information to
-    // the server and/or tweak certain RPC behaviors.
-    ClientContext context;
+        Response response;
 
-    // The actual RPC.
-    Status status = stub_->SayHello(&context, request, &reply);
+        Status status = stub_->CheckPrimary(&context, request, &response);
 
-    // Act upon its status.
-    if (status.ok()) {
-      return reply.message();
-    } else {
-      std::cout << status.error_code() << ": " << status.error_message()
-                << std::endl;
-      return "RPC failed";
+        if(status.ok()) {
+            return response.primary();
+        } else {
+            // return error code
+        }
     }
-  }
 
- private:
-  std::unique_ptr<Greeter::Stub> stub_;
+    int Read(off_t offset) {
+        ClientContext context;
+
+        ReadRequest request;
+        request.set_address(offset);
+
+        Response response;
+
+        Status status = stub_->Read(&context, request, &response);
+
+        if(status.ok()) {
+            if(response.return_code() == 1) {
+                std::cout << response.data();
+                return response.return_code();
+            }
+            return response.error_code();
+        } else {
+            return -1;
+        }
+    }
+
+    int Write(off_t offset, const std::string& data) {
+        ClientContext context;
+
+        WriteRequest request;
+        request.set_address(offset);
+        request.set_data(data);
+
+        Response response;
+
+        Status status = stub_->Write(&context, request, &response);
+
+        if(status.ok()) {
+            if(response.return_code() == 1) {
+                return response.return_code();
+            }
+            return response.error_code();
+        } else {
+            return -1;
+        }
+    }
+
+  private:
+    std::unique_ptr<RBS::Stub> stub_;
 };
 
 int main(int argc, char** argv) {
-  // Instantiate the client. It requires a channel, out of which the actual RPCs
-  // are created. This channel models a connection to an endpoint specified by
-  // the argument "--target=" which is the only expected argument.
-  // We indicate that the channel isn't authenticated (use of
-  // InsecureChannelCredentials()).
-  std::string target_str;
-  std::string arg_str("--target");
-  if (argc > 1) {
-    std::string arg_val = argv[1];
-    size_t start_pos = arg_val.find(arg_str);
-    if (start_pos != std::string::npos) {
-      start_pos += arg_str.size();
-      if (arg_val[start_pos] == '=') {
-        target_str = arg_val.substr(start_pos + 1);
-      } else {
-        std::cout << "The only correct argument syntax is --target="
-                  << std::endl;
-        return 0;
-      }
+
+  std::string server1 = argv[1];
+  std::string server2 = argv[2];
+
+  RBSClient rbsClient1(
+      grpc::CreateChannel(server1, grpc::InsecureChannelCredentials()));
+  RBSClient rbsClient2(
+      grpc::CreateChannel(server2, grpc::InsecureChannelCredentials()));
+
+  int user_input;
+  std::cin >> user_input;    // input = 1 for read, 2 for write, 0 to exit
+  off_t offset;
+  std::string data;
+  int primary=0;
+  while(user_input != 0) {
+
+    std::cout << "Enter offset: " << std::endl;
+    std::cin >> offset;
+
+    if(user_input == 1) {
+
+        int result;
+        if(primary == 0) {
+            result = rbsClient1.Read(offset); 
+        } else {
+            result = rbsClient2.Read(offset);
+        }
+        
+        if(result == -1) {
+            primary = 1-primary;
+            if(primary == 0) {
+                result = rbsClient1.Read(offset); 
+            } else {
+                result = rbsClient2.Read(offset);
+            }
+        } 
+    
     } else {
-      std::cout << "The only acceptable argument is --target=" << std::endl;
-      return 0;
+        
+        std::cout << "Enter data to write: " << std::endl;
+        std::cin >> data;
+
+        int result;
+        
+        if(primary == 0) {
+            result = rbsClient1.Write(offset, data); 
+        } else {
+            result = rbsClient2.Write(offset, data);
+        }
+
+        if(result == -1) {
+            primary = 1-primary;
+            if(primary == 0) {
+                result = rbsClient1.Write(offset, data); 
+            } else {
+                result = rbsClient2.Write(offset, data);
+            }
+        } 
+
+        std::cout << result;
+
     }
-  } else {
-    target_str = "localhost:50051";
+
+    std::cin >> user_input;    // input = 1 for read, 2 for write, 0 to exit
   }
-  GreeterClient greeter(
-      grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials()));
-  std::string user("world");
-  std::string reply = greeter.SayHello(user);
-  std::cout << "Greeter received: " << reply << std::endl;
 
   return 0;
 }

@@ -31,6 +31,7 @@ using grpc::Server;
 using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::Status;
+using namespace cs739;
 // using helloworld::Greeter;
 // using helloworld::HelloReply;
 // using helloworld::HelloRequest;
@@ -55,7 +56,7 @@ class RBSImpl final : public RBS::Service {
     
     int fd = open(FILE_PATH, O_RDONLY);
     if (fd < 0) {
-      reply->set_error_number(errno);
+      reply->set_error_code(errno);
       printf("%s : Failed to open file\n", __func__);
       perror(strerror(errno));
       return Status::OK;
@@ -66,7 +67,7 @@ class RBSImpl final : public RBS::Service {
     printf("block pread: \n<%s>\n", buf);
 
     if (close(fd) != 0) {
-      reply->set_error_number(errno);
+      reply->set_error_code(errno);
       printf("%s : Failed to close file\n", __func__);
       perror(strerror(errno));
       return Status::OK;
@@ -74,7 +75,7 @@ class RBSImpl final : public RBS::Service {
 
     reply->set_data(buf);
     reply->set_return_code(0);
-    reply->error_number(0);
+    reply->error_code(0);
     return Status::OK;
   }
 
@@ -83,7 +84,7 @@ class RBSImpl final : public RBS::Service {
     
     int fd = open(FILE_PATH, O_WRONLY);
     if (fd < 0) {
-      reply->set_error_number(errno);
+      reply->set_error_code(errno);
       printf("%s : Failed to open file\n", __func__);
       perror(strerror(errno));
       return Status::OK;
@@ -91,7 +92,7 @@ class RBSImpl final : public RBS::Service {
 
     int block_num = request->address()/BLOCK_SIZE;
     if (block_num >= MAX_NUM_BLOCKS) {
-      reply->set_error_number(errno);
+      reply->set_error_code(errno);
       printf("%s : Invalid block number\n", __func__);
       perror(strerror(errno));
       return Status::OK;
@@ -103,21 +104,21 @@ class RBSImpl final : public RBS::Service {
     lockArray[block_num].unlock();
 
     if (res == -1) {
-      reply->set_error_number(errno);
+      reply->set_error_code(errno);
       printf("%s : Failed to write to file\n", __func__);
       perror(strerror(errno));
       return Status::OK;
     }
 
     if (close(fd) != 0) {
-      reply->set_error_number(errno);
+      reply->set_error_code(errno);
       printf("%s : Failed to close file\n", __func__);
       perror(strerror(errno));
       return Status::OK;
     }
     
     reply->set_return_code(0);
-    reply->error_number(0);
+    reply->error_code(0);
     return Status::OK;
   }
 };

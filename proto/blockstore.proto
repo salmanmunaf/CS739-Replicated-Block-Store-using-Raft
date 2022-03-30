@@ -4,13 +4,15 @@ package cs739;
 
 
 service RBS {
-  rpc CheckPrimary(CheckPrimaryRequest) returns(Response);
+  rpc CheckPrimary(EmptyPacket) returns(Response);
   rpc Read(ReadRequest) returns(Response);
   rpc Write(WriteRequest) returns(Response);
 }
 
-message CheckPrimaryRequest {
-
+// The RPCs that define the communication between
+service PBInterface {
+  rpc Heartbeat (EmptyPacket) returns (EmptyPacket) {}
+  rpc CopyToSecondary (WriteRequest) returns (Response) {}
 }
 
 message ReadRequest {
@@ -28,3 +30,5 @@ message Response {
   int32 primary = 3;
   string data = 4;
 }
+
+message EmptyPacket {}

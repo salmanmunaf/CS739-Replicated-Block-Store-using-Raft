@@ -23,6 +23,11 @@
 
 #include <fcntl.h>
 #include <unistd.h>
+#include <cerrno>
+#include <cstdio>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #include <grpcpp/ext/proto_server_reflection_plugin.h>
 #include <grpcpp/grpcpp.h>
@@ -44,6 +49,8 @@ using namespace cs739;
 #define BLOCK_SIZE (4*KB)
 std::mutex lockArray [MAX_NUM_BLOCKS];
 const std::string FILE_PATH = "blockstore.log";
+
+uint64_t time_since_last_response = 0;
 
 // Logic and data behind the server's behavior.
 class RBSImpl final : public RBS::Service {
@@ -124,6 +131,51 @@ class RBSImpl final : public RBS::Service {
     
     reply->set_return_code(0);
     reply->set_error_code(0);
+    return Status::OK;
+  }
+};
+
+class PBInterfaceImpl final : public PBInterface::Service {
+  Status Heartbeat(ServerContext* context, const EmptyPacket* request,
+                EmptyPacket* reply) override {
+    // Simply respond with a success
+    return Status::OK;
+  }
+
+  Status CopyToSecondary(ServerContext* context, const WriteRequest* request,
+                Response* reply) override {
+    int fd;
+    int ret;
+    // For now, assume that the data is stored as <block number>.dat
+    std::string data_path = FILE_PATH + std::to_string(request->address());
+    std::string tmp_path = data_path + ".tmp";
+
+    // First, write the changes to a tmp file
+    fd = open(tmp_path.c_str(), O_RDWR);
+    if (fd == -1) {
+      goto error;
+    }
+
+    ret = write(fd, request->data().c_str(), request->data().length());
+    if (ret == -1) {
+      goto error;
+    }
+
+    ret = close(fd);
+    if (ret == -1) {
+      goto error;
+    }
+
+    // Then, atomically rename the tmp file to the target file
+    ret = rename(tmp_path.c_str(), data_path.c_str());
+    if (ret == -1) {
+      goto error;
+    }
+
+    return Status::OK;
+error:
+    std::cout << "CopyToSecondary: " << strerror(errno) << std::endl;
+    reply->set_error_code(errno);
     return Status::OK;
   }
 };

@@ -59,7 +59,7 @@ class RBSClient {
     int CheckPrimary() {
         ClientContext context;
 
-        CheckPrimaryRequest request;
+        EmptyPacket request;
 
         Response response;
 

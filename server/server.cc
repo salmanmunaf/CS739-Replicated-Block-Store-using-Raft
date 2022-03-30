@@ -19,6 +19,11 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <cerrno>
+#include <cstdio>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #include <grpcpp/ext/proto_server_reflection_plugin.h>
 #include <grpcpp/grpcpp.h>
@@ -33,6 +38,13 @@ using grpc::Status;
 using helloworld::Greeter;
 using helloworld::HelloReply;
 using helloworld::HelloRequest;
+using helloworld::PBInterface;
+using helloworld::WritePacket;
+using helloworld::StatusReply;
+using helloworld::Empty;
+
+uint64_t time_since_last_response = 0;
+std::string data_dir = "/";
 
 // Logic and data behind the server's behavior.
 class GreeterServiceImpl final : public Greeter::Service {
@@ -40,6 +52,51 @@ class GreeterServiceImpl final : public Greeter::Service {
                   HelloReply* reply) override {
     std::string prefix("Hello ");
     reply->set_message(prefix + request->name());
+    return Status::OK;
+  }
+};
+
+class PBInterfaceImpl final : public PBInterface::Service {
+  Status Heartbeat(ServerContext* context, const Empty* request,
+                Empty* reply) override {
+    // Simply respond with a success
+    return Status::OK;
+  }
+
+  Status CopyToSecondary(ServerContext* context, const WritePacket* request,
+                StatusReply* reply) override {
+    int fd;
+    int ret;
+    // For now, assume that the data is stored as <block number>.dat
+    std::string data_path = data_dir + std::to_string(request->address()) + ".dat";
+    std::string tmp_path = data_path + ".tmp";
+
+    // First, write the changes to a tmp file
+    fd = open(tmp_path.c_str(), O_RDWR);
+    if (fd == -1) {
+      goto error;
+    }
+
+    ret = write(fd, request->data().c_str(), request->data().length());
+    if (ret == -1) {
+      goto error;
+    }
+
+    ret = close(fd);
+    if (ret == -1) {
+      goto error;
+    }
+
+    // Then, atomically rename the tmp file to the target file
+    ret = rename(tmp_path.c_str(), data_path.c_str());
+    if (ret == -1) {
+      goto error;
+    }
+
+    return Status::OK;
+error:
+    std::cout << "CopyToSecondary: " << strerror(errno) << std::endl;
+    reply->set_status(errno);
     return Status::OK;
   }
 };

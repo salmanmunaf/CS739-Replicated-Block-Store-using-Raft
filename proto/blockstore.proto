@@ -27,6 +27,12 @@ service Greeter {
   rpc SayHello (HelloRequest) returns (HelloReply) {}
 }
 
+// The RPCs that define the communication between
+service PBInterface {
+  rpc Heartbeat (Empty) returns (Empty) {}
+  rpc CopyToSecondary (WritePacket) returns (StatusReply) {}
+}
+
 // The request message containing the user's name.
 message HelloRequest {
   string name = 1;
@@ -36,3 +42,14 @@ message HelloRequest {
 message HelloReply {
   string message = 1;
 }
+
+message WritePacket {
+  uint64 address = 1;
+  string data = 2;
+}
+
+message StatusReply {
+  int32 status = 1;
+}
+
+message Empty {}

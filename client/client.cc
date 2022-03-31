@@ -48,6 +48,9 @@ using grpc::Status;
 using grpc::StatusCode;
 using namespace cs739;
 
+#define KB (1024)
+#define BLOCK_SIZE (4*KB)
+
 class RBSClient {
   public:
     RBSClient(std::shared_ptr<Channel> channel)
@@ -126,9 +129,10 @@ int main(int argc, char** argv) {
       grpc::CreateChannel(server2, grpc::InsecureChannelCredentials()));
 
   int user_input;
+  std::cout << "Enter operation: ";
   std::cin >> user_input;    // input = 1 for read, 2 for write, 0 to exit
   off_t offset;
-  std::string data;
+  char* str;
   int primary=0;
   while(user_input != 0) {
 
@@ -137,48 +141,63 @@ int main(int argc, char** argv) {
 
     if(user_input == 1) {
 
-        int result;
-        if(primary == 0) {
-            result = rbsClient1.Read(offset); 
-        } else {
-            result = rbsClient2.Read(offset);
-        }
-        
-        if(result == -1) {
-            primary = 1-primary;
+        int result = -1, retry = 1;
+        while(result == -1 && retry <= 3) {
             if(primary == 0) {
                 result = rbsClient1.Read(offset); 
             } else {
                 result = rbsClient2.Read(offset);
             }
-        } 
-    
-    } else {
-        
-        std::cout << "Enter data to write: " << std::endl;
-        std::cin >> data;
-
-        int result;
-        
-        if(primary == 0) {
-            result = rbsClient1.Write(offset, data); 
-        } else {
-            result = rbsClient2.Write(offset, data);
         }
 
         if(result == -1) {
             primary = 1-primary;
-            if(primary == 0) {
-                result = rbsClient1.Write(offset, data); 
-            } else {
-                result = rbsClient2.Write(offset, data);
-            }
         } 
+
+        while(result == -1 && retry <= 3) {
+            if(primary == 0) {
+                result = rbsClient1.Read(offset); 
+            } else {
+                result = rbsClient2.Read(offset);
+            }
+        }
+    
+    } else {
+        
+        std::cout << "Enter data to write: " << std::endl;
+        std::cin >> str;
+
+        // char* str = (char *) malloc(BLOCK_SIZE/sizeof(char));
+        // strcpy(str, data);
+
+        std::cout << "Data to write: " << str << std::endl;
+        
+        int result = -1, retry = 1;
+        while(result == -1 && retry <= 3) {
+            if(primary == 0) {
+                result = rbsClient1.Write(offset, std::string(str)); 
+            } else {
+                result = rbsClient2.Write(offset, std::string(str));
+            }
+        }
+
+        if(result == -1) {
+            primary = 1-primary;
+        }
+
+        while(result == -1 && retry <= 3) {
+            if(primary == 0) {
+                result = rbsClient1.Write(offset, std::string(str)); 
+            } else {
+                result = rbsClient2.Write(offset, std::string(str));
+            }
+        }
 
         std::cout << result;
 
     }
 
+    std::cout << "Enter operation: ";
     std::cin >> user_input;    // input = 1 for read, 2 for write, 0 to exit
   }
 

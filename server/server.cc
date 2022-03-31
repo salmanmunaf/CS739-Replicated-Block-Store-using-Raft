@@ -21,6 +21,9 @@
 #include <string>
 #include <mutex>
 
+#include <fcntl.h>
+#include <unistd.h>
+
 #include <grpcpp/ext/proto_server_reflection_plugin.h>
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/health_check_service_interface.h>
@@ -51,10 +54,11 @@ class RBSImpl final : public RBS::Service {
   //   return Status::OK;
   // }
 
-  Status pread(ServerContext* context, const ReadRequest* request,
+  Status Read(ServerContext* context, const ReadRequest* request,
                   Response* reply) override {
     
-    int fd = open(FILE_PATH, O_RDONLY);
+    std::cout << "Data to read at offset: " << request->address() << std::endl;
+    int fd = open(FILE_PATH.c_str(), O_RDONLY);
     if (fd < 0) {
       reply->set_error_code(errno);
       printf("%s : Failed to open file\n", __func__);
@@ -75,14 +79,15 @@ class RBSImpl final : public RBS::Service {
 
     reply->set_data(buf);
     reply->set_return_code(0);
-    reply->error_code(0);
+    reply->set_error_code(0);
     return Status::OK;
   }
 
-  Status pwrite(ServerContext* context, const ReadRequest* request,
+  Status Write(ServerContext* context, const WriteRequest* request,
                   Response* reply) override {
     
-    int fd = open(FILE_PATH, O_WRONLY);
+    std::cout << "Data to write: " << request->data().c_str() << std::endl;
+    int fd = open(FILE_PATH.c_str(), O_WRONLY);
     if (fd < 0) {
       reply->set_error_code(errno);
       printf("%s : Failed to open file\n", __func__);
@@ -118,7 +123,7 @@ class RBSImpl final : public RBS::Service {
     }
     
     reply->set_return_code(0);
-    reply->error_code(0);
+    reply->set_error_code(0);
     return Status::OK;
   }
 };

@@ -41,6 +41,7 @@ using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::Status;
 using namespace cs739;
+using namespace std;
 // using helloworld::Greeter;
 // using helloworld::HelloReply;
 // using helloworld::HelloRequest;
@@ -54,3 +55,48 @@ const std::string FILE_PATH = "blockstore.log";
 uint64_t time_since_last_response = 0;
 queue<string> data_log; //queue to log data when backup fails
 queue<int> block_log; //queue to log block num when backup fails
+
+
+Status Write(ServerContext* context, const WriteRequest* request,
+                  Response* reply) override {
+    cout << "I am backup. Request received from primary to write data" << endl;
+    cout << "Data to write: " << request->data().c_str() << endl;
+    int fd = open(FILE_PATH.c_str(), O_WRONLY);
+    if (fd < 0) {
+      reply->set_error_code(errno);
+      printf("%s : Failed to open file\n", __func__);
+      perror(strerror(errno));
+      return Status::OK;
+    }
+
+    int block_num = request->address()/BLOCK_SIZE;
+    if (block_num >= MAX_NUM_BLOCKS) {
+      reply->set_error_code(errno);
+      printf("%s : Invalid block number\n", __func__);
+      perror(strerror(errno));
+      return Status::OK;
+    }
+
+    lockArray[block_num].lock();
+    int res = pwrite(fd, request->data().c_str(), BLOCK_SIZE, request->address());
+    fsync(fd);
+    lockArray[block_num].unlock();
+
+    if (res == -1) {
+      reply->set_error_code(errno);
+      printf("%s : Failed to write to file\n", __func__);
+      perror(strerror(errno));
+      return Status::OK;
+    }
+
+    if (close(fd) != 0) {
+      reply->set_error_code(errno);
+      printf("%s : Failed to close file\n", __func__);
+      perror(strerror(errno));
+      return Status::OK;
+    }
+
+    reply->set_return_code(0);
+    reply->set_error_code(0);
+    return Status::OK;
+  }

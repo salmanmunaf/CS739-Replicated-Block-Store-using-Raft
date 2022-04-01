@@ -49,11 +49,12 @@ using namespace cs739;
 #define KB (1024)
 #define BLOCK_SIZE (4*KB)
 std::mutex lockArray [MAX_NUM_BLOCKS];
+std::mutex queue_lock; //lock to ensure atomicity in queue operations
 const std::string FILE_PATH = "blockstore.log";
 
 uint64_t time_since_last_response = 0;
-queue<string> data_log; //queue to log data when backup fails
-queue<int> block_log; //queue to log block num when backup fails
+queue<string> data_log; //queue to log data to send to backup
+queue<int64_t> address_log; //queue to log address to send to backup
 
 // Logic and data behind the server's behavior.
 class RBSImpl final : public RBS::Service {
@@ -150,33 +151,37 @@ class PBInterfaceImpl final : public PBInterface::Service {
   //if no heartbeat response from the backup, primary starts logging client requests
   //even when the backup comes up and the log transfer to backup has started, new requests from clients should still be
   //put in the back of the queue unless backup catches up with the primary
-  void request_logger(int block_num, string data)
+  void request_logger(int64_t address, string data)
   {
+	  queue_lock.lock();
 	  data_log.push(data);
-	  block_log.push(block_num);
+	  address_log.push(address);
+	  queue_lock.unlock();
 	  return;
   }
 
   //when the backup comes back again, the primary transfers the log to backup
-  int LogTransfer()
-  {
+  int LogTransfer() {
 	  ClientContext context;
-	  TransferRequest request;
-	  TransferResponse response;
+	  WriteRequest request;
+	  Response response;
 	  Status status;
 
 	  while (data_log.empty() == 0) {
-		  request.set_blockNum(block_log.front());
+		  request.set_address(address_log.front());
 		  request.set_data(data_log.front());
-		  status = stub_->LogTransfer(&context, request, &response);
+		  status = stub_->Write(&context, request, &response);
 
 		  if (status.ok()) {
-			  if (response.return_code() == 1) { //FIXME: check this condition if needed or not!
-				  block_log.pop();
+			  if (response.return_code() == 0) { //FIXME: check this condition if needed or not!
+				  queue_lock.lock();
+				  address_log.pop();
 				  data_log.pop();
+				  queue_lock.unlock();
 				  //return response.return_code();
+			  } else {
+				  return response.error_code(); //FIXME: check which error codes to return
 			  }
-			  //return response.error_code(); //FIXME: check which error codes to return
 		  } else {
 			  return -1;
 		  }

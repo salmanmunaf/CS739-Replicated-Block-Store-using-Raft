@@ -20,6 +20,7 @@
 #include <memory>
 #include <string>
 #include <mutex>
+#include <queue>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -51,6 +52,8 @@ std::mutex lockArray [MAX_NUM_BLOCKS];
 const std::string FILE_PATH = "blockstore.log";
 
 uint64_t time_since_last_response = 0;
+queue<string> data_log; //queue to log data when backup fails
+queue<int> block_log; //queue to log block num when backup fails
 
 // Logic and data behind the server's behavior.
 class RBSImpl final : public RBS::Service {
@@ -142,6 +145,45 @@ class PBInterfaceImpl final : public PBInterface::Service {
     return Status::OK;
   }
 
+  /********************************************************************************/
+
+  //if no heartbeat response from the backup, primary starts logging client requests
+  //even when the backup comes up and the log transfer to backup has started, new requests from clients should still be
+  //put in the back of the queue unless backup catches up with the primary
+  void request_logger(int block_num, string data)
+  {
+	  data_log.push(data);
+	  block_log.push(block_num);
+	  return;
+  }
+
+  //when the backup comes back again, the primary transfers the log to backup
+  int LogTransfer() {
+	  ClientContext context;
+	  TransferRequest request;
+
+	  //make a loop here
+	  request.set_blockNum(block_log.front());
+	  request.set_data(data_log.front());
+
+	  TransferResponse response;
+
+	  Status status = stub_->Write(&context, request, &response);
+
+	  if(status.ok()) {
+		  if(response.return_code() == 1) {
+			  block_log.pop();
+			  data_log.pop();
+			  return response.return_code();
+		  }
+		  return response.error_code();
+	  } else {
+		  return -1;
+	  }
+  }
+
+  /********************************************************************************/
+
   Status CopyToSecondary(ServerContext* context, const WriteRequest* request,
                 Response* reply) override {
     int fd;
@@ -178,6 +220,9 @@ error:
     reply->set_error_code(errno);
     return Status::OK;
   }
+
+private: //FIXME: might have to remove
+    std::unique_ptr<RBS::Stub> stub_;
 };
 
 void RunServer() {

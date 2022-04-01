@@ -24,6 +24,16 @@ message WriteRequest {
   string data = 2;
 }
 
+message TransferRequest {
+  int32 blockNum = 1;
+  string data = 2;
+}
+
+message TransferResponse {
+  int32 return_code = 1;
+  int32 error_code = 2;
+}
+
 message Response {
   int32 return_code = 1;
   int32 error_code = 2;

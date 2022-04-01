@@ -158,28 +158,30 @@ class PBInterfaceImpl final : public PBInterface::Service {
   }
 
   //when the backup comes back again, the primary transfers the log to backup
-  int LogTransfer() {
+  int LogTransfer()
+  {
 	  ClientContext context;
 	  TransferRequest request;
-
-	  //make a loop here
-	  request.set_blockNum(block_log.front());
-	  request.set_data(data_log.front());
-
 	  TransferResponse response;
+	  Status status;
 
-	  Status status = stub_->Write(&context, request, &response);
+	  while (data_log.empty() == 0) {
+		  request.set_blockNum(block_log.front());
+		  request.set_data(data_log.front());
+		  status = stub_->Write(&context, request, &response);
 
-	  if(status.ok()) {
-		  if(response.return_code() == 1) {
-			  block_log.pop();
-			  data_log.pop();
-			  return response.return_code();
+		  if (status.ok()) {
+			  if (response.return_code() == 1) { //FIXME: check this condition if needed or not!
+				  block_log.pop();
+				  data_log.pop();
+				  //return response.return_code();
+			  }
+			  //return response.error_code(); //FIXME: check which error codes to return
+		  } else {
+			  return -1;
 		  }
-		  return response.error_code();
-	  } else {
-		  return -1;
 	  }
+	  return 0;
   }
 
   /********************************************************************************/
@@ -221,7 +223,7 @@ error:
     return Status::OK;
   }
 
-private: //FIXME: might have to remove
+private: //FIXME: might have to remove/modify
     std::unique_ptr<RBS::Stub> stub_;
 };
 

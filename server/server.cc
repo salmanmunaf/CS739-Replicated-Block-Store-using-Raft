@@ -168,7 +168,7 @@ class PBInterfaceImpl final : public PBInterface::Service {
 	  while (data_log.empty() == 0) {
 		  request.set_blockNum(block_log.front());
 		  request.set_data(data_log.front());
-		  status = stub_->Write(&context, request, &response);
+		  status = stub_->LogTransfer(&context, request, &response);
 
 		  if (status.ok()) {
 			  if (response.return_code() == 1) { //FIXME: check this condition if needed or not!

@@ -51,17 +51,17 @@ using namespace cs739;
 #define BLOCK_SIZE (4*KB)
 std::mutex lockArray [MAX_NUM_BLOCKS];
 std::mutex queue_lock; //lock to ensure atomicity in queue operations
-const std::string data_dir = "./";
+const std::string FILE_PATH = "blockstore.log";
 
 uint64_t time_since_last_response = 0;
 std::queue<std::string> data_log; //queue to log data to send to backup
 std::queue<uint64_t> address_log; //queue to log address to send to backup
 
-bool block_aligned(uint64_t address) {
-    return address & (BLOCK_SIZE - 1);
+bool is_block_aligned(uint64_t addr) {
+  return (addr & (BLOCK_SIZE - 1)) == 0;
 }
 
-int read_block_data(std::string block_file, char *buf, size_t count, off_t offset) {
+int read_block_data(std::string block_file, char *buf, off_t offset) {
   int fd;
   int ret;
 
@@ -70,7 +70,7 @@ int read_block_data(std::string block_file, char *buf, size_t count, off_t offse
     goto err;
   }
 
-  ret = pread(fd, buf, count, offset);
+  ret = pread(fd, buf, BLOCK_SIZE, offset);
   if (ret < 0) {
     goto err;
   }
@@ -79,13 +79,13 @@ int read_block_data(std::string block_file, char *buf, size_t count, off_t offse
     goto err;
   }
 
-  return 0;
+  return ret;
 err:
   printf("%s : Failed to read file %s\n", __func__, block_file.c_str());
   return -1;
 }
 
-int write_block_data(std::string block_file, const char *buf, size_t count, off_t offset) {
+int write_block_data(std::string block_file, const char *buf, off_t offset) {
   int fd;
   int ret;
 
@@ -94,7 +94,7 @@ int write_block_data(std::string block_file, const char *buf, size_t count, off_
     goto err;
   }
 
-  ret = pwrite(fd, buf, count, offset);
+  ret = pwrite(fd, buf, BLOCK_SIZE, offset);
   if (ret < 0) {
     goto err;
   }
@@ -113,6 +113,105 @@ err:
     return -1;
 }
 
+int write_undo_file(std::string undo_path, off_t address) {
+  char* undo_buf = new char[BLOCK_SIZE];
+  int undo_write_size;
+  int fd;
+  int ret;
+
+  // Read the data that will be overwritten
+  undo_write_size = read_block_data(FILE_PATH, undo_buf, address);
+  if (undo_write_size < 0) {
+    // It's fine if the file doesn't exist, that's fine, it just means that
+    // this block hasn't been allocated yet.
+    if (errno == ENOENT) {
+      undo_write_size = 0;
+    } else {
+      goto err;
+    }
+  }
+
+  // Write the old block data into the undo file
+  fd = open(undo_path.c_str(), O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+  if (fd < 0) {
+    goto err;
+  }
+
+  ret = write(fd, undo_buf, undo_write_size);
+  if (ret < 0) {
+    goto err;
+  }
+
+  ret = fsync(fd);
+  if (fd < 0) {
+    goto err;
+  }
+  ret = close(fd);
+  if (fd < 0) {
+    goto err;
+  }
+
+  delete undo_buf;
+  return 0;
+err:
+  delete undo_buf;
+  printf("%s : Failed to create undo file %s\n", __func__, undo_path.c_str());
+  return -1;
+}
+
+Status do_atomic_write(const WriteRequest* request, Response *reply) {
+  const char* write_buf = request->data().c_str();
+  uint64_t address = request->address();
+  uint64_t block = address / BLOCK_SIZE;
+  std::string undo_path = FILE_PATH + std::to_string(address) + ".undo";
+  int fd;
+  int ret;
+
+  lockArray[block].lock();
+  if (!is_block_aligned(address)) {
+    lockArray[block + 1].lock();
+  }
+
+  ret = write_undo_file(undo_path, address);
+  if (ret < 0) {
+    goto err;
+  }
+
+  // Write the new data into the data files
+  ret = write_block_data(FILE_PATH, write_buf, address);
+  if (ret < 0) {
+    goto err;
+  }
+
+  // write_block_data fsyncs the data, so the new data should be persisted,
+  // so we can delete the undo file
+  ret = unlink(undo_path.c_str());
+  if (ret < 0) {
+    goto err;
+  }
+
+
+  if (!is_block_aligned(address)) {
+    lockArray[block + 1].unlock();
+  }
+  lockArray[block].unlock();
+
+  reply->set_return_code(1);
+  reply->set_error_code(0);
+  return Status::OK;
+err:
+  if (!is_block_aligned(address)) {
+    lockArray[block + 1].unlock();
+  }
+  lockArray[block].unlock();
+
+  printf("Write %lx failed\n", address);
+  reply->set_return_code(-1);
+  reply->set_error_code(errno);
+  perror(strerror(errno));
+  return Status::OK;
+}
+
 // Logic and data behind the server's behavior.
 class RBSImpl final : public RBS::Service {
   // Status SayHello(ServerContext* context, const HelloRequest* request,
@@ -127,34 +226,18 @@ class RBSImpl final : public RBS::Service {
     std::cout << "Data to read at offset: " << request->address() << std::endl;
     char* buf = new char[BLOCK_SIZE];
     uint64_t address = request->address();
-    uint64_t block = address / BLOCK_SIZE;
-    uint64_t offset = address % BLOCK_SIZE;
-    uint64_t first_block_read_size = BLOCK_SIZE - offset;
-    uint64_t second_block_read_size = offset;
-    std::string data1_path = data_dir + "/" + std::to_string(block) + ".dat";
-    std::string data2_path = data_dir + "/" + std::to_string(block + 1) + ".dat";
-    int fd;
     int ret;
 
     // Read the data from the first block
-    ret = read_block_data(data1_path, buf, first_block_read_size, offset);
+    ret = read_block_data(FILE_PATH, buf, address);
     if (ret < 0) {
       goto err;
     }
 
-    // If needed, read data from the second block
-    if (second_block_read_size > 0) {
-      ret = read_block_data(data2_path, &buf[first_block_read_size],
-                             second_block_read_size, 0);
-      if (ret < 0) {
-        goto err;
-      }
-    }
-
-    delete buf;
-    reply->set_data(buf);
+    reply->set_data(std::string(buf, BLOCK_SIZE));
     reply->set_return_code(1);
     reply->set_error_code(0);
+    delete buf;
     return Status::OK;
 
 err:
@@ -168,112 +251,8 @@ err:
 
   Status Write(ServerContext* context, const WriteRequest* request,
                   Response* reply) override {
-    
     std::cout << "Data to write: " << request->data().c_str() << std::endl;
-    char* undo_buf = new char[2*BLOCK_SIZE];
-    const char* write_buf = request->data().c_str();
-    uint64_t address = request->address();
-    uint64_t block = address / BLOCK_SIZE;
-    uint64_t offset = address % BLOCK_SIZE;
-    uint64_t first_block_write_size = BLOCK_SIZE - offset;
-    uint64_t second_block_write_size = offset;
-    uint64_t undo_write_size = second_block_write_size > 0 ? 2 * BLOCK_SIZE : BLOCK_SIZE;
-    std::string data1_path = data_dir + "/" + std::to_string(block) + ".dat";
-    std::string data2_path = data_dir + "/" + std::to_string(block + 1) + ".dat";
-    std::string undo_path = data_dir + "/" + std::to_string(block) + ".undo";
-    int fd;
-    int ret;
-
-
-    lockArray[block].lock();
-    if (second_block_write_size > 0) {
-      lockArray[block + 1].lock();
-    }
-
-    // Read the data from the first block
-    ret = read_block_data(data1_path, undo_buf, BLOCK_SIZE, 0);
-    if (ret < 0) {
-      // It's fine if the file doesn't exist, that's fine, it just means that
-      // this block hasn't been allocated yet.
-      if (errno == ENOENT) {
-        undo_write_size = 0;
-      } else {
-        goto err;
-      }
-    }
-
-    // If needed, read data from the second block
-    if (second_block_write_size > 0 && undo_write_size > 0) {
-      ret = read_block_data(data2_path, &undo_buf[BLOCK_SIZE],
-                             BLOCK_SIZE, 0);
-      if (ret < 0) {
-        if (errno == ENOENT) {
-          undo_write_size = BLOCK_SIZE;
-        } else {
-          goto err;
-        }
-      }
-    }
-
-    // Write the old block data into the undo file
-    fd = open(undo_path.c_str(), O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
-    if (fd < 0) {
-      goto err;
-    }
-
-    ret = write(fd, undo_buf, undo_write_size);
-    if (ret < 0) {
-      goto err;
-    }
-
-    ret = fsync(fd);
-    if (fd < 0) {
-      goto err;
-    }
-    ret = close(fd);
-    if (fd < 0) {
-      goto err;
-    }
-
-    // Write the new data into the data files
-    ret = write_block_data(data1_path, write_buf, first_block_write_size, offset);
-    if (ret < 0) {
-      goto err;
-    }
-
-    if (second_block_write_size > 0) {
-      ret = write_block_data(data2_path, &write_buf[first_block_write_size],
-                              second_block_write_size, 0);
-      if (ret < 0) {
-        goto err;
-      }
-      lockArray[block + 1].unlock();
-    }
-    lockArray[block].unlock();
-
-    // write_block_data fsyncs the data, so the new data should be persisted,
-    // so we can delete the undo file
-    ret = unlink(undo_path.c_str());
-    if (ret < 0) {
-      goto err;
-    }
-
-    delete undo_buf;
-    reply->set_return_code(1);
-    reply->set_error_code(0);
-    return Status::OK;
-err:
-    delete undo_buf;
-    if (second_block_write_size > 0) {
-      lockArray[block + 1].unlock();
-    }
-    lockArray[block].unlock();
-
-    printf("Write %lx failed\n", address);
-    reply->set_return_code(-1);
-    reply->set_error_code(errno);
-    perror(strerror(errno));
-    return Status::OK;
+    return do_atomic_write(request, reply);
   }
 };
 
@@ -331,39 +310,8 @@ class PBInterfaceImpl final : public PBInterface::Service {
 
   Status CopyToSecondary(ServerContext* context, const WriteRequest* request,
                 Response* reply) override {
-    int fd;
-    int ret;
-    // For now, assume that the data is stored as <block number>.dat
-    std::string data_path = data_dir + "/" + std::to_string(request->address()) + ".dat";
-    std::string tmp_path = data_path + ".tmp";
-
-    // First, write the changes to a tmp file
-    fd = open(tmp_path.c_str(), O_RDWR);
-    if (fd == -1) {
-      goto error;
-    }
-
-    ret = write(fd, request->data().c_str(), request->data().length());
-    if (ret == -1) {
-      goto error;
-    }
-
-    ret = close(fd);
-    if (ret == -1) {
-      goto error;
-    }
-
-    // Then, atomically rename the tmp file to the target file
-    ret = rename(tmp_path.c_str(), data_path.c_str());
-    if (ret == -1) {
-      goto error;
-    }
-
-    return Status::OK;
-error:
-    std::cout << "CopyToSecondary: " << strerror(errno) << std::endl;
-    reply->set_error_code(errno);
-    return Status::OK;
+    std::cout << "Data from primary: " << request->data() << std::endl;
+    return do_atomic_write(request, reply);
   }
 
 private: //FIXME: might have to remove/modify

@@ -132,7 +132,7 @@ int main(int argc, char** argv) {
   std::cout << "Enter operation: ";
   std::cin >> user_input;    // input = 1 for read, 2 for write, 0 to exit
   off_t offset;
-  char* str;
+  std::string str;
   int primary=0;
   while(user_input != 0) {
 
@@ -170,6 +170,7 @@ int main(int argc, char** argv) {
         // char* str = (char *) malloc(BLOCK_SIZE/sizeof(char));
         // strcpy(str, data);
 
+        str.resize(4096, ' ');
         std::cout << "Data to write: " << str << std::endl;
         
         int result = -1, retry = 1;
@@ -179,6 +180,7 @@ int main(int argc, char** argv) {
             } else {
                 result = rbsClient2.Write(offset, std::string(str));
             }
+            retry++;
         }
 
         if(result == -1) {
@@ -191,6 +193,7 @@ int main(int argc, char** argv) {
             } else {
                 result = rbsClient2.Write(offset, std::string(str));
             }
+            retry++;
         }
 
         std::cout << result;

@@ -21,14 +21,14 @@ message ReadRequest {
 
 message WriteRequest {
   uint64 address = 1;
-  string data = 2;
+  bytes data = 2;
 }
 
 message Response {
   int32 return_code = 1;
   int32 error_code = 2;
   int32 primary = 3;
-  string data = 4;
+  bytes data = 4;
 }
 
 message EmptyPacket {}

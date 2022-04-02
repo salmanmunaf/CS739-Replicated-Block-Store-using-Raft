@@ -81,7 +81,7 @@ int read_block_data(std::string block_file, char *buf, size_t count, off_t offse
 
   return 0;
 err:
-  printf("%s : Failed to open file %s\n", __func__, block_file.c_str());
+  printf("%s : Failed to read file %s\n", __func__, block_file.c_str());
   return -1;
 }
 
@@ -151,12 +151,14 @@ class RBSImpl final : public RBS::Service {
       }
     }
 
+    delete buf;
     reply->set_data(buf);
     reply->set_return_code(1);
     reply->set_error_code(0);
     return Status::OK;
 
 err:
+    delete buf;
     printf("Read %lx failed\n", address);
     reply->set_return_code(-1);
     reply->set_error_code(errno);
@@ -191,15 +193,25 @@ err:
     // Read the data from the first block
     ret = read_block_data(data1_path, undo_buf, BLOCK_SIZE, 0);
     if (ret < 0) {
-      goto err;
+      // It's fine if the file doesn't exist, that's fine, it just means that
+      // this block hasn't been allocated yet.
+      if (errno == ENOENT) {
+        undo_write_size = 0;
+      } else {
+        goto err;
+      }
     }
 
     // If needed, read data from the second block
-    if (second_block_write_size > 0) {
+    if (second_block_write_size > 0 && undo_write_size > 0) {
       ret = read_block_data(data2_path, &undo_buf[BLOCK_SIZE],
                              BLOCK_SIZE, 0);
       if (ret < 0) {
-        goto err;
+        if (errno == ENOENT) {
+          undo_write_size = BLOCK_SIZE;
+        } else {
+          goto err;
+        }
       }
     }
 
@@ -246,10 +258,12 @@ err:
       goto err;
     }
 
+    delete undo_buf;
     reply->set_return_code(1);
     reply->set_error_code(0);
     return Status::OK;
 err:
+    delete undo_buf;
     if (second_block_write_size > 0) {
       lockArray[block + 1].unlock();
     }

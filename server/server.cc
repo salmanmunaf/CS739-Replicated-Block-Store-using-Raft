@@ -36,6 +36,7 @@
 
 #include "blockstore.grpc.pb.h"
 
+using grpc::ClientContext;
 using grpc::Server;
 using grpc::ServerBuilder;
 using grpc::ServerContext;
@@ -50,11 +51,67 @@ using namespace cs739;
 #define BLOCK_SIZE (4*KB)
 std::mutex lockArray [MAX_NUM_BLOCKS];
 std::mutex queue_lock; //lock to ensure atomicity in queue operations
-const std::string FILE_PATH = "blockstore.log";
+const std::string data_dir = "./";
 
 uint64_t time_since_last_response = 0;
-queue<string> data_log; //queue to log data to send to backup
-queue<int64_t> address_log; //queue to log address to send to backup
+std::queue<std::string> data_log; //queue to log data to send to backup
+std::queue<uint64_t> address_log; //queue to log address to send to backup
+
+bool block_aligned(uint64_t address) {
+    return address & (BLOCK_SIZE - 1);
+}
+
+int read_block_data(std::string block_file, char *buf, size_t count, off_t offset) {
+  int fd;
+  int ret;
+
+  fd = open(block_file.c_str(), O_RDONLY);
+  if (fd < 0) {
+    goto err;
+  }
+
+  ret = pread(fd, buf, count, offset);
+  if (ret < 0) {
+    goto err;
+  }
+
+  if (close(fd) != 0) {
+    goto err;
+  }
+
+  return 0;
+err:
+  printf("%s : Failed to open file %s\n", __func__, block_file.c_str());
+  return -1;
+}
+
+int write_block_data(std::string block_file, const char *buf, size_t count, off_t offset) {
+  int fd;
+  int ret;
+
+  fd = open(block_file.c_str(), O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+  if (fd < 0) {
+    goto err;
+  }
+
+  ret = pwrite(fd, buf, count, offset);
+  if (ret < 0) {
+    goto err;
+  }
+
+  if (fsync(fd) != 0) {
+    goto err;
+  }
+
+  if (close(fd) != 0) {
+    goto err;
+  }
+
+  return 0;
+err:
+    printf("%s : Failed to open file %s\n", __func__, block_file.c_str());
+    return -1;
+}
 
 // Logic and data behind the server's behavior.
 class RBSImpl final : public RBS::Service {
@@ -67,30 +124,43 @@ class RBSImpl final : public RBS::Service {
 
   Status Read(ServerContext* context, const ReadRequest* request,
                   Response* reply) override {
-    
     std::cout << "Data to read at offset: " << request->address() << std::endl;
-    int fd = open(FILE_PATH.c_str(), O_RDONLY);
-    if (fd < 0) {
-      reply->set_error_code(errno);
-      printf("%s : Failed to open file\n", __func__);
-      perror(strerror(errno));
-      return Status::OK;
-    }
-    
     char* buf = new char[BLOCK_SIZE];
-    int ret = pread(fd, buf, BLOCK_SIZE, request->address());
-    printf("block pread: \n<%s>\n", buf);
+    uint64_t address = request->address();
+    uint64_t block = address / BLOCK_SIZE;
+    uint64_t offset = address % BLOCK_SIZE;
+    uint64_t first_block_read_size = BLOCK_SIZE - offset;
+    uint64_t second_block_read_size = offset;
+    std::string data1_path = data_dir + "/" + std::to_string(block) + ".dat";
+    std::string data2_path = data_dir + "/" + std::to_string(block + 1) + ".dat";
+    int fd;
+    int ret;
 
-    if (close(fd) != 0) {
-      reply->set_error_code(errno);
-      printf("%s : Failed to close file\n", __func__);
-      perror(strerror(errno));
-      return Status::OK;
+    // Read the data from the first block
+    ret = read_block_data(data1_path, buf, first_block_read_size, offset);
+    if (ret < 0) {
+      goto err;
+    }
+
+    // If needed, read data from the second block
+    if (second_block_read_size > 0) {
+      ret = read_block_data(data2_path, &buf[first_block_read_size],
+                             second_block_read_size, 0);
+      if (ret < 0) {
+        goto err;
+      }
     }
 
     reply->set_data(buf);
-    reply->set_return_code(0);
+    reply->set_return_code(1);
     reply->set_error_code(0);
+    return Status::OK;
+
+err:
+    printf("Read %lx failed\n", address);
+    reply->set_return_code(-1);
+    reply->set_error_code(errno);
+    perror(strerror(errno));
     return Status::OK;
   }
 
@@ -98,43 +168,97 @@ class RBSImpl final : public RBS::Service {
                   Response* reply) override {
     
     std::cout << "Data to write: " << request->data().c_str() << std::endl;
-    int fd = open(FILE_PATH.c_str(), O_WRONLY);
+    char* undo_buf = new char[2*BLOCK_SIZE];
+    const char* write_buf = request->data().c_str();
+    uint64_t address = request->address();
+    uint64_t block = address / BLOCK_SIZE;
+    uint64_t offset = address % BLOCK_SIZE;
+    uint64_t first_block_write_size = BLOCK_SIZE - offset;
+    uint64_t second_block_write_size = offset;
+    uint64_t undo_write_size = second_block_write_size > 0 ? 2 * BLOCK_SIZE : BLOCK_SIZE;
+    std::string data1_path = data_dir + "/" + std::to_string(block) + ".dat";
+    std::string data2_path = data_dir + "/" + std::to_string(block + 1) + ".dat";
+    std::string undo_path = data_dir + "/" + std::to_string(block) + ".undo";
+    int fd;
+    int ret;
+
+
+    lockArray[block].lock();
+    if (second_block_write_size > 0) {
+      lockArray[block + 1].lock();
+    }
+
+    // Read the data from the first block
+    ret = read_block_data(data1_path, undo_buf, BLOCK_SIZE, 0);
+    if (ret < 0) {
+      goto err;
+    }
+
+    // If needed, read data from the second block
+    if (second_block_write_size > 0) {
+      ret = read_block_data(data2_path, &undo_buf[BLOCK_SIZE],
+                             BLOCK_SIZE, 0);
+      if (ret < 0) {
+        goto err;
+      }
+    }
+
+    // Write the old block data into the undo file
+    fd = open(undo_path.c_str(), O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
     if (fd < 0) {
-      reply->set_error_code(errno);
-      printf("%s : Failed to open file\n", __func__);
-      perror(strerror(errno));
-      return Status::OK;
+      goto err;
     }
 
-    int block_num = request->address()/BLOCK_SIZE;
-    if (block_num >= MAX_NUM_BLOCKS) {
-      reply->set_error_code(errno);
-      printf("%s : Invalid block number\n", __func__);
-      perror(strerror(errno));
-      return Status::OK;
+    ret = write(fd, undo_buf, undo_write_size);
+    if (ret < 0) {
+      goto err;
     }
 
-    lockArray[block_num].lock();
-    int res = pwrite(fd, request->data().c_str(), BLOCK_SIZE, request->address());
-    fsync(fd);
-    lockArray[block_num].unlock();
-
-    if (res == -1) {
-      reply->set_error_code(errno);
-      printf("%s : Failed to write to file\n", __func__);
-      perror(strerror(errno));
-      return Status::OK;
+    ret = fsync(fd);
+    if (fd < 0) {
+      goto err;
+    }
+    ret = close(fd);
+    if (fd < 0) {
+      goto err;
     }
 
-    if (close(fd) != 0) {
-      reply->set_error_code(errno);
-      printf("%s : Failed to close file\n", __func__);
-      perror(strerror(errno));
-      return Status::OK;
+    // Write the new data into the data files
+    ret = write_block_data(data1_path, write_buf, first_block_write_size, offset);
+    if (ret < 0) {
+      goto err;
     }
-    
-    reply->set_return_code(0);
+
+    if (second_block_write_size > 0) {
+      ret = write_block_data(data2_path, &write_buf[first_block_write_size],
+                              second_block_write_size, 0);
+      if (ret < 0) {
+        goto err;
+      }
+      lockArray[block + 1].unlock();
+    }
+    lockArray[block].unlock();
+
+    // write_block_data fsyncs the data, so the new data should be persisted,
+    // so we can delete the undo file
+    ret = unlink(undo_path.c_str());
+    if (ret < 0) {
+      goto err;
+    }
+
+    reply->set_return_code(1);
     reply->set_error_code(0);
+    return Status::OK;
+err:
+    if (second_block_write_size > 0) {
+      lockArray[block + 1].unlock();
+    }
+    lockArray[block].unlock();
+
+    printf("Write %lx failed\n", address);
+    reply->set_return_code(-1);
+    reply->set_error_code(errno);
+    perror(strerror(errno));
     return Status::OK;
   }
 };
@@ -151,7 +275,7 @@ class PBInterfaceImpl final : public PBInterface::Service {
   //if no heartbeat response from the backup, primary starts logging client requests
   //even when the backup comes up and the log transfer to backup has started, new requests from clients should still be
   //put in the back of the queue unless backup catches up with the primary
-  void request_logger(int64_t address, string data)
+  void request_logger(uint64_t address, std::string data)
   {
 	  queue_lock.lock();
 	  data_log.push(data);
@@ -196,7 +320,7 @@ class PBInterfaceImpl final : public PBInterface::Service {
     int fd;
     int ret;
     // For now, assume that the data is stored as <block number>.dat
-    std::string data_path = FILE_PATH + std::to_string(request->address());
+    std::string data_path = data_dir + "/" + std::to_string(request->address()) + ".dat";
     std::string tmp_path = data_path + ".tmp";
 
     // First, write the changes to a tmp file

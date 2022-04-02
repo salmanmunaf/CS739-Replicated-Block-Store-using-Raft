@@ -36,6 +36,7 @@
 
 #include "blockstore.grpc.pb.h"
 
+using grpc::Channel;
 using grpc::ClientContext;
 using grpc::Server;
 using grpc::ServerBuilder;
@@ -56,6 +57,8 @@ const std::string FILE_PATH = "blockstore.log";
 uint64_t time_since_last_response = 0;
 std::queue<std::string> data_log; //queue to log data to send to backup
 std::queue<uint64_t> address_log; //queue to log address to send to backup
+bool is_primary = false;
+uint64_t last_comm_time = 0;
 
 bool is_block_aligned(uint64_t addr) {
   return (addr & (BLOCK_SIZE - 1)) == 0;
@@ -190,7 +193,6 @@ Status do_atomic_write(const WriteRequest* request, Response *reply) {
     goto err;
   }
 
-
   if (!is_block_aligned(address)) {
     lockArray[block + 1].unlock();
   }
@@ -211,6 +213,47 @@ err:
   perror(strerror(errno));
   return Status::OK;
 }
+
+class PBInterfaceClient {
+  public:
+    PBInterfaceClient(std::shared_ptr<Channel> channel)
+      : stub_(PBInterface::NewStub(channel)) {}
+
+    int Heartbeat() {
+      ClientContext context;
+      EmptyPacket request, response;
+
+      Status status = stub_->Heartbeat(&context, request, &response);
+
+      if (status.ok()) {
+        return 0;
+      } else {
+        return -1;
+      }
+    }
+
+    int CopyToSecondary(uint64_t address, std::string data) {
+      ClientContext context;
+      WriteRequest request;
+      Response response;
+
+      request.set_address(address);
+      request.set_data(data);
+
+      Status status = stub_->CopyToSecondary(&context, request, &response);
+
+      if (status.ok()) {
+        if(response.return_code() == 1) {
+            return response.return_code();
+        }
+        return -response.error_code();
+      } else {
+        return -1;
+      }
+    }
+  private:
+    std::unique_ptr<PBInterface::Stub> stub_;
+};
 
 // Logic and data behind the server's behavior.
 class RBSImpl final : public RBS::Service {
@@ -252,8 +295,21 @@ err:
   Status Write(ServerContext* context, const WriteRequest* request,
                   Response* reply) override {
     std::cout << "Data to write: " << request->data().c_str() << std::endl;
+
+    // If we are the primary, we better forward the data to the backup
+    if (is_primary) {
+      int ret = pb_client->CopyToSecondary(request->address(), request->data());
+      if (ret < 0) {
+        reply->set_return_code(-1);
+        reply->set_error_code(-ret);
+        return Status::OK;
+      }
+    }
+
     return do_atomic_write(request, reply);
   }
+public:
+    PBInterfaceClient *pb_client;
 };
 
 class PBInterfaceImpl final : public PBInterface::Service {
@@ -279,28 +335,18 @@ class PBInterfaceImpl final : public PBInterface::Service {
 
   //when the backup comes back again, the primary transfers the log to backup
   int LogTransfer() {
-	  ClientContext context;
-	  WriteRequest request;
-	  Response response;
-	  Status status;
+    int ret;
 
 	  while (data_log.empty() == 0) {
-		  request.set_address(address_log.front());
-		  request.set_data(data_log.front());
-		  status = stub_->Write(&context, request, &response);
+		  ret = pb_client->CopyToSecondary(address_log.front(), data_log.front());
 
-		  if (status.ok()) {
-			  if (response.return_code() == 0) { //FIXME: check this condition if needed or not!
-				  queue_lock.lock();
-				  address_log.pop();
-				  data_log.pop();
-				  queue_lock.unlock();
-				  //return response.return_code();
-			  } else {
-				  return response.error_code(); //FIXME: check which error codes to return
-			  }
+		  if (ret >= 0) {
+				queue_lock.lock();
+				address_log.pop();
+				data_log.pop();
+				queue_lock.unlock();
 		  } else {
-			  return -1;
+			  return ret;
 		  }
 	  }
 	  return 0;
@@ -314,13 +360,19 @@ class PBInterfaceImpl final : public PBInterface::Service {
     return do_atomic_write(request, reply);
   }
 
-private: //FIXME: might have to remove/modify
-    std::unique_ptr<RBS::Stub> stub_;
+public:
+    PBInterfaceClient *pb_client;
 };
 
-void RunServer() {
-  std::string server_address("0.0.0.0:50051");
+void RunServer(std::string listen_port, std::string other_server) {
+  std::string server_address("0.0.0.0:" + listen_port);
+  PBInterfaceImpl pb_service;
+  PBInterfaceClient pb_client(
+    grpc::CreateChannel(other_server, grpc::InsecureChannelCredentials()));
   RBSImpl service;
+
+  pb_service.pb_client = &pb_client;
+  service.pb_client = &pb_client;
 
   grpc::EnableDefaultHealthCheckService(true);
   grpc::reflection::InitProtoReflectionServerBuilderPlugin();
@@ -330,6 +382,7 @@ void RunServer() {
   // Register "service" as the instance through which we'll communicate with
   // clients. In this case it corresponds to an *synchronous* service.
   builder.RegisterService(&service);
+  builder.RegisterService(&pb_service);
   // Finally assemble the server.
   std::unique_ptr<Server> server(builder.BuildAndStart());
   std::cout << "Server listening on " << server_address << std::endl;
@@ -340,7 +393,16 @@ void RunServer() {
 }
 
 int main(int argc, char** argv) {
-  RunServer();
+  if (argc < 3) {
+    printf("Usage: ./server <listen_port> <server_ip:port> [is_primary]\n");
+    return -1;
+  }
+  std::string listen_port = argv[1];
+  std::string other_server = argv[2];
+  if (argc >= 4)
+    is_primary = true;
+
+  RunServer(listen_port, other_server);
 
   return 0;
 }

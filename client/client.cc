@@ -38,6 +38,7 @@
 // grpc library
 #include <grpcpp/grpcpp.h>
 // program's header
+#include "blockstore.h"
 #include "blockstore.grpc.pb.h"
 
 using grpc::Channel;
@@ -83,7 +84,7 @@ class RBSClient {
         Status status = stub_->Read(&context, request, &response);
 
         if(status.ok()) {
-            if(response.return_code() == 1) {
+            if(response.return_code() == BLOCKSTORE_SUCCESS) {
                 std::cout << response.data();
                 return response.return_code();
             }
@@ -105,7 +106,7 @@ class RBSClient {
         Status status = stub_->Write(&context, request, &response);
 
         if(status.ok()) {
-            if(response.return_code() == 1) {
+            if(response.return_code() == BLOCKSTORE_SUCCESS) {
                 return response.return_code();
             }
             return response.error_code();

@@ -37,6 +37,7 @@ add_custom_command(
 	DEPENDS "${bs_proto}"
 )
 
+include_directories("include")
 # Include generated *.pb.h file
 include_directories("${CMAKE_CURRENT_BINARY_DIR}")
 

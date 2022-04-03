@@ -37,6 +37,7 @@
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/health_check_service_interface.h>
 
+#include "blockstore.h"
 #include "blockstore.grpc.pb.h"
 
 using grpc::Channel;
@@ -208,7 +209,7 @@ Status do_atomic_write(const WriteRequest* request, Response *reply) {
   }
   lockArray[block].unlock();
 
-  reply->set_return_code(1);
+  reply->set_return_code(BLOCKSTORE_SUCCESS);
   reply->set_error_code(0);
   return Status::OK;
 err:
@@ -218,7 +219,7 @@ err:
   lockArray[block].unlock();
 
   printf("Write %lx failed\n", address);
-  reply->set_return_code(-1);
+  reply->set_return_code(BLOCKSTORE_FAIL);
   reply->set_error_code(errno);
   perror(strerror(errno));
   return Status::OK;
@@ -290,7 +291,7 @@ class RBSImpl final : public RBS::Service {
     }
 
     reply->set_data(std::string(buf, BLOCK_SIZE));
-    reply->set_return_code(1);
+    reply->set_return_code(BLOCKSTORE_SUCCESS);
     reply->set_error_code(0);
     delete buf;
     return Status::OK;
@@ -298,8 +299,8 @@ class RBSImpl final : public RBS::Service {
 err:
     delete buf;
     printf("Read %lx failed\n", address);
-    reply->set_return_code(-1);
-    reply->set_error_code(errno);
+    reply->set_return_code(BLOCKSTORE_FAIL);
+    reply->set_error_code(-errno);
     perror(strerror(errno));
     return Status::OK;
   }
@@ -312,7 +313,7 @@ err:
     if (is_primary) {
       int ret = pb_client.CopyToSecondary(request->address(), request->data());
       if (ret < 0) {
-        reply->set_return_code(-1);
+        reply->set_return_code(BLOCKSTORE_FAIL);
         reply->set_error_code(-ret);
         return Status::OK;
       }

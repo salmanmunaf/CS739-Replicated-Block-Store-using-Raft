@@ -21,6 +21,9 @@
 #include <string>
 #include <mutex>
 #include <queue>
+#include <atomic>
+#include <chrono>
+#include <thread>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -57,11 +60,18 @@ const std::string FILE_PATH = "blockstore.log";
 uint64_t time_since_last_response = 0;
 std::queue<std::string> data_log; //queue to log data to send to backup
 std::queue<uint64_t> address_log; //queue to log address to send to backup
-bool is_primary = false;
-uint64_t last_comm_time = 0;
+std::atomic<bool> is_primary(false);
+std::atomic<bool> secondary_up(false);
+std::atomic<uint64_t> last_comm_time(0);
 
 bool is_block_aligned(uint64_t addr) {
   return (addr & (BLOCK_SIZE - 1)) == 0;
+}
+
+uint64_t cur_time() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+    std::chrono::system_clock::now().time_since_epoch()
+  ).count();
 }
 
 int read_block_data(std::string block_file, char *buf, off_t offset) {
@@ -263,6 +273,8 @@ class RBSImpl final : public RBS::Service {
   //   reply->set_message(prefix + request->name());
   //   return Status::OK;
   // }
+  PBInterfaceClient pb_client;
+
 
   Status Read(ServerContext* context, const ReadRequest* request,
                   Response* reply) override {
@@ -298,7 +310,7 @@ err:
 
     // If we are the primary, we better forward the data to the backup
     if (is_primary) {
-      int ret = pb_client->CopyToSecondary(request->address(), request->data());
+      int ret = pb_client.CopyToSecondary(request->address(), request->data());
       if (ret < 0) {
         reply->set_return_code(-1);
         reply->set_error_code(-ret);
@@ -309,12 +321,22 @@ err:
     return do_atomic_write(request, reply);
   }
 public:
-    PBInterfaceClient *pb_client;
+  RBSImpl(std::string other_server)
+    : pb_client(grpc::CreateChannel(other_server, grpc::InsecureChannelCredentials()))
+  {}
+
 };
 
 class PBInterfaceImpl final : public PBInterface::Service {
+  PBInterfaceClient pb_client;
+
   Status Heartbeat(ServerContext* context, const EmptyPacket* request,
                 EmptyPacket* reply) override {
+    std::cout << "Received Heartbeat\n";
+
+    // Update when we last heard from the server
+    last_comm_time = cur_time();
+
     // Simply respond with a success
     return Status::OK;
   }
@@ -338,7 +360,7 @@ class PBInterfaceImpl final : public PBInterface::Service {
     int ret;
 
 	  while (data_log.empty() == 0) {
-		  ret = pb_client->CopyToSecondary(address_log.front(), data_log.front());
+		  ret = pb_client.CopyToSecondary(address_log.front(), data_log.front());
 
 		  if (ret >= 0) {
 				queue_lock.lock();
@@ -357,22 +379,24 @@ class PBInterfaceImpl final : public PBInterface::Service {
   Status CopyToSecondary(ServerContext* context, const WriteRequest* request,
                 Response* reply) override {
     std::cout << "Data from primary: " << request->data() << std::endl;
+
+    // Update when we last heard from the primary
+    last_comm_time = cur_time();
+
+    // Actually do the write
     return do_atomic_write(request, reply);
   }
 
 public:
-    PBInterfaceClient *pb_client;
+  PBInterfaceImpl(std::string other_server)
+    : pb_client(grpc::CreateChannel(other_server, grpc::InsecureChannelCredentials()))
+  {}
 };
 
 void RunServer(std::string listen_port, std::string other_server) {
   std::string server_address("0.0.0.0:" + listen_port);
-  PBInterfaceImpl pb_service;
-  PBInterfaceClient pb_client(
-    grpc::CreateChannel(other_server, grpc::InsecureChannelCredentials()));
-  RBSImpl service;
-
-  pb_service.pb_client = &pb_client;
-  service.pb_client = &pb_client;
+  PBInterfaceImpl pb_service(other_server);
+  RBSImpl service(other_server);
 
   grpc::EnableDefaultHealthCheckService(true);
   grpc::reflection::InitProtoReflectionServerBuilderPlugin();
@@ -392,9 +416,43 @@ void RunServer(std::string listen_port, std::string other_server) {
   server->Wait();
 }
 
+void handle_heartbeats(std::string other_server) {
+  PBInterfaceClient pb_client(
+      grpc::CreateChannel(other_server, grpc::InsecureChannelCredentials())
+  );
+  const int PRIMARY_TIMEOUT = 5000;
+  int ret;
+
+  while(true) {
+    // If we are the primary, give a heartbeat to the secondary
+    if (is_primary.load()) {
+      ret = pb_client.Heartbeat();
+
+      // If the heart beat is not responded to, assume the secondary is down
+      if (ret != 0) {
+        secondary_up = false;
+      } else {
+        secondary_up = true;
+      }
+    } else {
+      // If we haven't heard from the server in over 5 seconds, assume
+      // the primary has failed and take over
+      uint64_t last_time = last_comm_time.load();
+      uint64_t cur = cur_time();
+
+      if (cur_time() > last_time && cur_time() - last_comm_time.load() >= PRIMARY_TIMEOUT) {
+        std::cout << "Becoming the primary!\n";
+        is_primary = true;
+        secondary_up = false;
+      }
+    }
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  }
+}
+
 int main(int argc, char** argv) {
   if (argc < 3) {
-    printf("Usage: ./server <listen_port> <server_ip:port> [is_primary]\n");
+    std::cout << "Usage: ./server <listen_port> <server_ip:port> [is_primary]\n";;
     return -1;
   }
   std::string listen_port = argv[1];
@@ -402,7 +460,17 @@ int main(int argc, char** argv) {
   if (argc >= 4)
     is_primary = true;
 
-  RunServer(listen_port, other_server);
+  if (is_primary)
+    std::cout << "Running as primary!\n";
+  else
+    std::cout << "Running as backup!\n";
+
+  // On startup, give the primary an extra few seconds to send a heartbeat
+  last_comm_time = cur_time() + 10000;
+
+  std::thread server_thread(RunServer, listen_port, other_server);
+
+  handle_heartbeats(other_server);
 
   return 0;
 }

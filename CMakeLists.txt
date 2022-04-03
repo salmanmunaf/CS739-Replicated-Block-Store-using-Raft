@@ -41,6 +41,8 @@ include_directories("include")
 # Include generated *.pb.h file
 include_directories("${CMAKE_CURRENT_BINARY_DIR}")
 
+add_compile_options(-std=c++17)
+
 # Targets (client|server)
 foreach(_target client server)
 	add_executable(${_target} "${_target}/${_target}.cc"

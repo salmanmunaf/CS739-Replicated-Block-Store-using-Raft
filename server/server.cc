@@ -24,6 +24,7 @@
 #include <atomic>
 #include <chrono>
 #include <thread>
+#include <filesystem>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -157,11 +158,11 @@ int write_undo_file(std::string undo_path, off_t address) {
   }
 
   ret = fsync(fd);
-  if (fd < 0) {
+  if (ret < 0) {
     goto err;
   }
   ret = close(fd);
-  if (fd < 0) {
+  if (ret < 0) {
     goto err;
   }
 
@@ -173,11 +174,83 @@ err:
   return -1;
 }
 
+uint64_t find_address_from_path(std::string undo_path) {
+  // copy the path because the delimiting code will modify the string
+  std::string s(undo_path);
+  std::string token;
+  int pos;
+
+  // The address is before the last "."
+  while ((pos = s.find(".")) != std::string::npos) {
+    token = s.substr(0, pos);
+    s.erase(0, pos + 1);
+  }
+
+  std::cout << token << std::endl;
+  return std::stoi(token);
+}
+
+int recover_undo_file(std::string undo_path) {
+  char* undo_buf = new char[BLOCK_SIZE];
+  uint64_t address;
+  int undo_write_size;
+  int fd;
+  int ret;
+
+  address = find_address_from_path(undo_path);
+
+  // Read the data that will be overwritten
+  undo_write_size = read_block_data(FILE_PATH, undo_buf, address);
+  if (undo_write_size < 0) {
+    goto err;
+  }
+
+  // Write the recovered data into the correct spot in our data store
+  fd = open(undo_path.c_str(), O_WRONLY);
+  if (fd < 0) {
+    goto err;
+  }
+
+  ret = pwrite(fd, undo_buf, undo_write_size, address);
+  if (ret < 0) {
+    goto err;
+  }
+
+  // If the undo file was smaller than a block, that must mean that
+  // the write being undone extended the file, so we should truncate it
+  // back
+  if (undo_write_size != BLOCK_SIZE) {
+    ret = ftruncate(fd, address + undo_write_size);
+    if (ret < 0) {
+      goto err;
+    }
+  }
+
+  ret = fsync(fd);
+  if (ret < 0) {
+    goto err;
+  }
+
+  ret = close(fd);
+  if (ret < 0) {
+    goto err;
+  }
+
+  unlink(undo_path.c_str());
+
+  delete undo_buf;
+  return 0;
+err:
+  delete undo_buf;
+  printf("%s : Failed to recover undo file %s\n", __func__, undo_path.c_str());
+  return -1;
+}
+
 Status do_atomic_write(const WriteRequest* request, Response *reply) {
   const char* write_buf = request->data().c_str();
   uint64_t address = request->address();
   uint64_t block = address / BLOCK_SIZE;
-  std::string undo_path = FILE_PATH + std::to_string(address) + ".undo";
+  std::string undo_path = FILE_PATH + "." + std::to_string(address) + ".undo";
   int fd;
   int ret;
 
@@ -483,6 +556,13 @@ int main(int argc, char** argv) {
     std::cout << "Running as primary!\n";
   else
     std::cout << "Running as backup!\n";
+
+  for (const auto & entry : std::filesystem::directory_iterator("./")) {
+    if (std::filesystem::is_regular_file(entry) && entry.path().extension() == ".undo") {
+      std::cout << entry.path().filename() << std::endl;
+      recover_undo_file(entry.path().filename());
+    }
+  }
 
   // On startup, give the primary an extra few seconds to send a heartbeat
   last_comm_time = cur_time() + 10000;

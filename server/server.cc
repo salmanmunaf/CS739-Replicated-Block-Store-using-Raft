@@ -186,7 +186,6 @@ uint64_t find_address_from_path(std::string undo_path) {
     s.erase(0, pos + 1);
   }
 
-  std::cout << token << std::endl;
   return std::stoi(token);
 }
 
@@ -200,13 +199,13 @@ int recover_undo_file(std::string undo_path) {
   address = find_address_from_path(undo_path);
 
   // Read the data that will be overwritten
-  undo_write_size = read_block_data(FILE_PATH, undo_buf, address);
+  undo_write_size = read_block_data(undo_path, undo_buf, 0);
   if (undo_write_size < 0) {
     goto err;
   }
 
   // Write the recovered data into the correct spot in our data store
-  fd = open(undo_path.c_str(), O_WRONLY);
+  fd = open(FILE_PATH.c_str(), O_WRONLY);
   if (fd < 0) {
     goto err;
   }
@@ -250,6 +249,7 @@ Status do_atomic_write(const WriteRequest* request, Response *reply) {
   const char* write_buf = request->data().c_str();
   uint64_t address = request->address();
   uint64_t block = address / BLOCK_SIZE;
+  uint64_t write_hash = std::hash<std::string>{}(request->data());
   std::string undo_path = FILE_PATH + "." + std::to_string(address) + ".undo";
   int fd;
   int ret;
@@ -262,6 +262,17 @@ Status do_atomic_write(const WriteRequest* request, Response *reply) {
   ret = write_undo_file(undo_path, address);
   if (ret < 0) {
     goto err;
+  }
+
+  // To test the the undo logging stuff, if we see the data to write has the 
+  // hash of the signal value (which is "hello_world" followed by a blocks worth of 0)
+  // write some "corrupted" data and "crash" the server
+  if (write_hash == 13494594211096014138ull && is_primary.load()) {
+    char corruption[BLOCK_SIZE] = "corrupted_data_is_here";
+    int len = strlen(corruption);
+    memset(&corruption[BLOCK_SIZE], ' ', BLOCK_SIZE - len);
+    write_block_data(FILE_PATH, corruption, address);
+    exit(0);
   }
 
   // Write the new data into the data files
@@ -388,6 +399,7 @@ err:
 
   Status Write(ServerContext* context, const WriteRequest* request,
                   Response* reply) override {
+    Status status;
     int ret;
     std::cout << "Data to write: " << request->data().c_str() << std::endl;
 
@@ -395,6 +407,11 @@ err:
     if (!is_primary.load()) {
       reply->set_return_code(BLOCKSTORE_NOT_PRIM);
       return Status::OK;
+    }
+
+    status = do_atomic_write(request, reply);
+    if (!status.ok()) {
+      return status;
     }
 
     // If we think the backup is up, we better forward the data to it
@@ -415,7 +432,7 @@ err:
       queue_lock.unlock();
     }
 
-    return do_atomic_write(request, reply);
+    return Status::OK;
   }
 public:
   RBSImpl(std::string other_server)
@@ -559,7 +576,6 @@ int main(int argc, char** argv) {
 
   for (const auto & entry : std::filesystem::directory_iterator("./")) {
     if (std::filesystem::is_regular_file(entry) && entry.path().extension() == ".undo") {
-      std::cout << entry.path().filename() << std::endl;
       recover_undo_file(entry.path().filename());
     }
   }

@@ -62,7 +62,7 @@ uint64_t time_since_last_response = 0;
 std::queue<std::string> data_log; //queue to log data to send to backup
 std::queue<uint64_t> address_log; //queue to log address to send to backup
 std::atomic<bool> is_primary(false);
-std::atomic<bool> secondary_up(false);
+std::atomic<bool> backup_up(false);
 std::atomic<uint64_t> last_comm_time(0);
 
 bool is_block_aligned(uint64_t addr) {
@@ -280,9 +280,17 @@ class RBSImpl final : public RBS::Service {
   Status Read(ServerContext* context, const ReadRequest* request,
                   Response* reply) override {
     std::cout << "Data to read at offset: " << request->address() << std::endl;
-    char* buf = new char[BLOCK_SIZE];
+    char* buf;
     uint64_t address = request->address();
     int ret;
+
+    // Return without doing anything if we are not the primary
+    if (!is_primary.load()) {
+      reply->set_return_code(BLOCKSTORE_NOT_PRIM);
+      return Status::OK;
+    }
+
+    buf = new char[BLOCK_SIZE];
 
     // Read the data from the first block
     ret = read_block_data(FILE_PATH, buf, address);
@@ -307,16 +315,31 @@ err:
 
   Status Write(ServerContext* context, const WriteRequest* request,
                   Response* reply) override {
+    int ret;
     std::cout << "Data to write: " << request->data().c_str() << std::endl;
 
-    // If we are the primary, we better forward the data to the backup
-    if (is_primary) {
-      int ret = pb_client.CopyToSecondary(request->address(), request->data());
+    // Make sure we are the primary
+    if (!is_primary.load()) {
+      reply->set_return_code(BLOCKSTORE_NOT_PRIM);
+      return Status::OK;
+    }
+
+    // If we think the backup is up, we better forward the data to it
+    if (backup_up.load()) {
+      ret = pb_client.CopyToSecondary(request->address(), request->data());
+      // If it failed, add the write to the queue and move on
       if (ret < 0) {
-        reply->set_return_code(BLOCKSTORE_FAIL);
-        reply->set_error_code(-ret);
-        return Status::OK;
+        queue_lock.lock();
+        backup_up = false;
+        data_log.push(request->data());
+        address_log.push(request->address());
+        queue_lock.unlock();
       }
+    } else {
+      queue_lock.lock();
+      data_log.push(request->data());
+      address_log.push(request->address());
+      queue_lock.unlock();
     }
 
     return do_atomic_write(request, reply);
@@ -340,39 +363,6 @@ class PBInterfaceImpl final : public PBInterface::Service {
 
     // Simply respond with a success
     return Status::OK;
-  }
-
-  /********************************************************************************/
-
-  //if no heartbeat response from the backup, primary starts logging client requests
-  //even when the backup comes up and the log transfer to backup has started, new requests from clients should still be
-  //put in the back of the queue unless backup catches up with the primary
-  void request_logger(uint64_t address, std::string data)
-  {
-	  queue_lock.lock();
-	  data_log.push(data);
-	  address_log.push(address);
-	  queue_lock.unlock();
-	  return;
-  }
-
-  //when the backup comes back again, the primary transfers the log to backup
-  int LogTransfer() {
-    int ret;
-
-	  while (data_log.empty() == 0) {
-		  ret = pb_client.CopyToSecondary(address_log.front(), data_log.front());
-
-		  if (ret >= 0) {
-				queue_lock.lock();
-				address_log.pop();
-				data_log.pop();
-				queue_lock.unlock();
-		  } else {
-			  return ret;
-		  }
-	  }
-	  return 0;
   }
 
   /********************************************************************************/
@@ -417,6 +407,25 @@ void RunServer(std::string listen_port, std::string other_server) {
   server->Wait();
 }
 
+//when the backup comes back again, the primary transfers the log to backup
+int LogTransfer(PBInterfaceClient &pb_client) {
+  int ret;
+
+  while (data_log.empty() == 0) {
+	  ret = pb_client.CopyToSecondary(address_log.front(), data_log.front());
+
+	  if (ret >= 0) {
+			queue_lock.lock();
+			address_log.pop();
+			data_log.pop();
+			queue_lock.unlock();
+	  } else {
+		  return ret;
+	  }
+  }
+  return 0;
+}
+
 void handle_heartbeats(std::string other_server) {
   PBInterfaceClient pb_client(
       grpc::CreateChannel(other_server, grpc::InsecureChannelCredentials())
@@ -425,15 +434,24 @@ void handle_heartbeats(std::string other_server) {
   int ret;
 
   while(true) {
-    // If we are the primary, give a heartbeat to the secondary
+    // If we are the primary, give a heartbeat to the backup
     if (is_primary.load()) {
       ret = pb_client.Heartbeat();
 
-      // If the heart beat is not responded to, assume the secondary is down
       if (ret != 0) {
-        secondary_up = false;
+        // If the heart beat is not responded to, assume the backup is down
+        backup_up = false;
       } else {
-        secondary_up = true;
+        // If this is the first successful heartbeat since the backup went down,
+        // send out the queued changes
+        if (!backup_up) {
+          ret = LogTransfer(pb_client);
+          // Only say the backup is up and running if our entire queue was
+          // emptied successfully.
+          if (ret == 0) {
+            backup_up = true;
+          }
+        }
       }
     } else {
       // If we haven't heard from the server in over 5 seconds, assume
@@ -444,7 +462,7 @@ void handle_heartbeats(std::string other_server) {
       if (cur_time() > last_time && cur_time() - last_comm_time.load() >= PRIMARY_TIMEOUT) {
         std::cout << "Becoming the primary!\n";
         is_primary = true;
-        secondary_up = false;
+        backup_up = false;
       }
     }
     std::this_thread::sleep_for(std::chrono::seconds(1));

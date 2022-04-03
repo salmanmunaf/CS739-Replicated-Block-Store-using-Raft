@@ -2,6 +2,7 @@
 #define BLOCKSTORE_H
 
 #define BLOCKSTORE_SUCCESS 1
+#define BLOCKSTORE_NOT_PRIM 2
 #define BLOCKSTORE_FAIL -2
 
 #endif // BLOCKSTORE_H

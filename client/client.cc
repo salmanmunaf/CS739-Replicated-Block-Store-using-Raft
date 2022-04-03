@@ -85,7 +85,7 @@ class RBSClient {
 
         if(status.ok()) {
             if(response.return_code() == BLOCKSTORE_SUCCESS) {
-                std::cout << response.data();
+                std::cout << std::hash<std::string>{}(response.data()) << std::endl;
                 return response.return_code();
             }
             return response.error_code();
@@ -172,7 +172,7 @@ int main(int argc, char** argv) {
         // strcpy(str, data);
 
         str.resize(4096, ' ');
-        std::cout << "Data to write: " << str << std::endl;
+        std::cout << "Hash of data to write: " << std::hash<std::string>{}(str) << std::endl;
         
         int result = -1, retry = 1;
         while(result == -1 && retry <= 3) {

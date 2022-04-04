@@ -239,19 +239,12 @@ err:
   return -1;
 }
 
-Status do_atomic_write(const WriteRequest* request, Response *reply) {
+Status do_atomic_write(const WriteRequest* request, Response *reply, std::string undo_path) {
   const char* write_buf = request->data().c_str();
   uint64_t address = request->address();
-  uint64_t block = address / BLOCK_SIZE;
   uint64_t write_hash = std::hash<std::string>{}(request->data());
-  std::string undo_path = FILE_PATH + "." + std::to_string(address) + ".undo";
   int fd;
   int ret;
-
-  lockArray[block].lock();
-  if (!is_block_aligned(address)) {
-    lockArray[block + 1].lock();
-  }
 
   ret = write_undo_file(undo_path, address);
   if (ret < 0) {
@@ -275,27 +268,10 @@ Status do_atomic_write(const WriteRequest* request, Response *reply) {
     goto err;
   }
 
-  // write_block_data fsyncs the data, so the new data should be persisted,
-  // so we can delete the undo file
-  ret = unlink(undo_path.c_str());
-  if (ret < 0) {
-    goto err;
-  }
-
-  if (!is_block_aligned(address)) {
-    lockArray[block + 1].unlock();
-  }
-  lockArray[block].unlock();
-
   reply->set_return_code(BLOCKSTORE_SUCCESS);
   reply->set_error_code(0);
   return Status::OK;
 err:
-  if (!is_block_aligned(address)) {
-    lockArray[block + 1].unlock();
-  }
-  lockArray[block].unlock();
-
   printf("Write %lx failed\n", address);
   reply->set_return_code(BLOCKSTORE_FAIL);
   reply->set_error_code(-errno);
@@ -395,6 +371,9 @@ err:
                   Response* reply) override {
     Status status;
     int ret;
+    uint64_t address = request->address();
+    uint64_t block = address / BLOCK_SIZE;
+    std::string undo_path = FILE_PATH + "." + std::to_string(address) + ".undo";
     std::cout << "Data to write: " << request->data().c_str() << std::endl;
 
     // Make sure we are the primary
@@ -403,9 +382,14 @@ err:
       return Status::OK;
     }
 
-    status = do_atomic_write(request, reply);
+    lockArray[block].lock();
+    if (!is_block_aligned(address)) {
+      lockArray[block + 1].lock();
+    }
+
+    status = do_atomic_write(request, reply, undo_path);
     if (!status.ok()) {
-      return status;
+      goto unlock;
     }
 
     // If we think the backup is up, we better forward the data to it
@@ -426,7 +410,17 @@ err:
       queue_lock.unlock();
     }
 
-    return Status::OK;
+    // The data should be persisted locally and is either persisted on the primary
+    // or we have added it to the queue to do so, so we can delete the undo file
+    unlink(undo_path.c_str());
+
+unlock:
+    if (!is_block_aligned(address)) {
+      lockArray[block + 1].unlock();
+    }
+    lockArray[block].unlock();
+
+    return status;
   }
 public:
   RBSImpl(std::string other_server)
@@ -453,13 +447,31 @@ class PBInterfaceImpl final : public PBInterface::Service {
 
   Status CopyToSecondary(ServerContext* context, const WriteRequest* request,
                 Response* reply) override {
+    Status status;            
+    uint64_t address = request->address();
+    uint64_t block = address / BLOCK_SIZE;
+    std::string undo_path = FILE_PATH + "." + std::to_string(address) + ".undo";
+
     std::cout << "Data from primary: " << request->data() << std::endl;
 
     // Update when we last heard from the primary
     last_comm_time = cur_time();
 
+    lockArray[block].lock();
+    if (!is_block_aligned(address)) {
+      lockArray[block + 1].lock();
+    }
+
     // Actually do the write
-    return do_atomic_write(request, reply);
+    status = do_atomic_write(request, reply, undo_path);
+    unlink(undo_path.c_str());
+
+    if (!is_block_aligned(address)) {
+      lockArray[block + 1].unlock();
+    }
+    lockArray[block].unlock();
+
+    return status;
   }
 
 public:

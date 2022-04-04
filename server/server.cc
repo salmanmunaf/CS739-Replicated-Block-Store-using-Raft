@@ -123,6 +123,7 @@ err:
 }
 
 int write_undo_file(std::string undo_path, off_t address) {
+  std::string undo_tmp_path = undo_path + ".tmp";
   char* undo_buf = new char[BLOCK_SIZE];
   int undo_write_size;
   int fd;
@@ -140,8 +141,8 @@ int write_undo_file(std::string undo_path, off_t address) {
     }
   }
 
-  // Write the old block data into the undo file
-  fd = open(undo_path.c_str(), O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+  // Write the old block data into the temporary undo file
+  fd = open(undo_tmp_path.c_str(), O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
   if (fd < 0) {
     goto err;
   }
@@ -156,6 +157,13 @@ int write_undo_file(std::string undo_path, off_t address) {
     goto err;
   }
   ret = close(fd);
+  if (ret < 0) {
+    goto err;
+  }
+
+  // Once we know the undo data has been written correctly, we can
+  // rename it to be the actual undo file.
+  ret = rename(undo_tmp_path.c_str(), undo_path.c_str());
   if (ret < 0) {
     goto err;
   }

@@ -70,12 +70,6 @@ bool is_block_aligned(uint64_t addr) {
   return (addr & (BLOCK_SIZE - 1)) == 0;
 }
 
-uint64_t cur_time() {
-  return std::chrono::duration_cast<std::chrono::milliseconds>(
-    std::chrono::system_clock::now().time_since_epoch()
-  ).count();
-}
-
 int read_block_data(std::string block_file, char *buf, off_t offset) {
   int fd;
   int ret;
@@ -304,7 +298,7 @@ err:
 
   printf("Write %lx failed\n", address);
   reply->set_return_code(BLOCKSTORE_FAIL);
-  reply->set_error_code(errno);
+  reply->set_error_code(-errno);
   perror(strerror(errno));
   return Status::OK;
 }

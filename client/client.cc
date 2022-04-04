@@ -24,6 +24,7 @@
 #include <string>
 #include <unordered_map>
 #include <chrono>
+#include <thread>
 // standard c
 #include <unistd.h>
 #include <stdlib.h> // malloc
@@ -87,6 +88,8 @@ class RBSClient {
             if(response.return_code() == BLOCKSTORE_SUCCESS) {
                 std::cout << std::hash<std::string>{}(response.data()) << std::endl;
                 return response.return_code();
+            } else if (response.return_code() == BLOCKSTORE_NOT_PRIM) {
+                return response.return_code();
             }
             return response.error_code();
         } else {
@@ -106,7 +109,8 @@ class RBSClient {
         Status status = stub_->Write(&context, request, &response);
 
         if(status.ok()) {
-            if(response.return_code() == BLOCKSTORE_SUCCESS) {
+            int return_code = response.return_code();
+            if(return_code == BLOCKSTORE_SUCCESS || return_code == BLOCKSTORE_NOT_PRIM) {
                 return response.return_code();
             }
             return response.error_code();
@@ -134,35 +138,39 @@ int main(int argc, char** argv) {
   std::cin >> user_input;    // input = 1 for read, 2 for write, 0 to exit
   off_t offset;
   std::string str;
+  uint64_t request_start_time;
+  const uint64_t TIMEOUT = 7000;
+  bool first_try;
   int primary=0;
   while(user_input != 0) {
 
     std::cout << "Enter offset: " << std::endl;
     std::cin >> offset;
 
+    first_try = true;
     if(user_input == 1) {
 
         int result = -1, retry = 1;
-        while(result == -1 && retry <= 3) {
-            if(primary == 0) {
-                result = rbsClient1.Read(offset); 
+        request_start_time = cur_time();
+
+        while (result != BLOCKSTORE_SUCCESS && cur_time() - request_start_time < TIMEOUT) {
+            // Wait some time between sending requests
+            if (!first_try) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            }
+            first_try = false;
+
+            if (primary == 0) {
+                result = rbsClient1.Read(offset);
             } else {
                 result = rbsClient2.Read(offset);
             }
-        }
 
-        if(result == -1) {
-            primary = 1-primary;
-        } 
-
-        while(result == -1 && retry <= 3) {
-            if(primary == 0) {
-                result = rbsClient1.Read(offset); 
-            } else {
-                result = rbsClient2.Read(offset);
+            std::cout << primary << ": " << result << std::endl;
+            if (result != BLOCKSTORE_SUCCESS) {
+                primary = 1 - primary;
             }
         }
-    
     } else {
         
         std::cout << "Enter data to write: " << std::endl;
@@ -173,31 +181,29 @@ int main(int argc, char** argv) {
 
         str.resize(4096, ' ');
         std::cout << "Hash of data to write: " << std::hash<std::string>{}(str) << std::endl;
-        
+
         int result = -1, retry = 1;
-        while(result == -1 && retry <= 3) {
+        request_start_time = cur_time();
+
+        while (result != BLOCKSTORE_SUCCESS && cur_time() - request_start_time < TIMEOUT) {
+            if (!first_try) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            }
+            first_try = false;
+
             if(primary == 0) {
                 result = rbsClient1.Write(offset, std::string(str)); 
             } else {
                 result = rbsClient2.Write(offset, std::string(str));
             }
-            retry++;
-        }
 
-        if(result == -1) {
-            primary = 1-primary;
-        }
-
-        while(result == -1 && retry <= 3) {
-            if(primary == 0) {
-                result = rbsClient1.Write(offset, std::string(str)); 
-            } else {
-                result = rbsClient2.Write(offset, std::string(str));
+            std::cout << primary << ": " << result << std::endl;
+            if (result != BLOCKSTORE_SUCCESS) {
+                primary = 1 - primary;
             }
-            retry++;
         }
 
-        std::cout << result;
+        std::cout << result << std::endl;
 
     }
 

@@ -350,6 +350,7 @@ class RBSImpl final : public RBS::Service {
 
     // Return without doing anything if we are not the primary
     if (!is_primary.load()) {
+      std::cout << "Not the primary!\n";
       reply->set_return_code(BLOCKSTORE_NOT_PRIM);
       return Status::OK;
     }
@@ -395,10 +396,11 @@ err:
     uint64_t address = request->address();
     uint64_t block = address / BLOCK_SIZE;
     std::string undo_path = FILE_PATH + "." + std::to_string(address) + ".undo";
-    std::cout << "Data to write: " << request->data().c_str() << std::endl;
+    std::cout << "Hash of data to write: " << std::hash<std::string>{}(request->data()) << std::endl;
 
     // Make sure we are the primary
     if (!is_primary.load()) {
+      std::cout << "Not the primary!\n";
       reply->set_return_code(BLOCKSTORE_NOT_PRIM);
       return Status::OK;
     }
@@ -473,7 +475,7 @@ class PBInterfaceImpl final : public PBInterface::Service {
     uint64_t block = address / BLOCK_SIZE;
     std::string undo_path = FILE_PATH + "." + std::to_string(address) + ".undo";
 
-    std::cout << "Data from primary: " << request->data() << std::endl;
+    std::cout << "Hash of data from primary: " << std::hash<std::string>{}(request->data()) << std::endl;
 
     // Update when we last heard from the primary
     last_comm_time = cur_time();

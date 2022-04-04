@@ -24,13 +24,13 @@
 #include <atomic>
 #include <chrono>
 #include <thread>
-#include <filesystem>
 
 #include <fcntl.h>
 #include <unistd.h>
 #include <cerrno>
 #include <cstdio>
 #include <fcntl.h>
+#include <dirent.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -568,9 +568,24 @@ int main(int argc, char** argv) {
   else
     std::cout << "Running as backup!\n";
 
-  for (const auto & entry : std::filesystem::directory_iterator("./")) {
-    if (std::filesystem::is_regular_file(entry) && entry.path().extension() == ".undo") {
-      recover_undo_file(entry.path().filename());
+  DIR *dir;
+  struct dirent *entry;
+
+  dir = opendir("./");
+  while (entry = readdir(dir)) {
+    char *filename = entry->d_name;
+    int name_size = strlen(filename);
+    int extension_index;
+
+    if (name_size >= 5) {
+      extension_index = name_size - 5;
+    } else {
+      extension_index = 0;
+    }
+    std::cout << "A " << filename << std::endl;
+    if (entry->d_type == DT_REG && strcmp(&filename[extension_index], ".undo") == 0) {
+      std::cout << "B " << filename << std::endl;
+      recover_undo_file(std::string(filename));
     }
   }
 

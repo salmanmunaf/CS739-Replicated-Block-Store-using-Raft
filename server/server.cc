@@ -582,9 +582,7 @@ int main(int argc, char** argv) {
     } else {
       extension_index = 0;
     }
-    std::cout << "A " << filename << std::endl;
     if (entry->d_type == DT_REG && strcmp(&filename[extension_index], ".undo") == 0) {
-      std::cout << "B " << filename << std::endl;
       recover_undo_file(std::string(filename));
     }
   }

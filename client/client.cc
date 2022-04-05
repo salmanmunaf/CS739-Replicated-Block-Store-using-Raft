@@ -52,6 +52,7 @@ using namespace cs739;
 
 #define KB (1024)
 #define BLOCK_SIZE (4*KB)
+#define TIMEOUT (7000)
 
 class RBSClient {
   public:
@@ -123,6 +124,59 @@ class RBSClient {
     std::unique_ptr<RBS::Stub> stub_;
 };
 
+int do_read(RBSClient &rbsClient1, RBSClient &rbsClient2, int primary, off_t offset) {
+    bool first_try = true;
+    int result = -1, retry = 1;
+    uint64_t request_start_time = cur_time();
+
+    while (result != BLOCKSTORE_SUCCESS && cur_time() - request_start_time < TIMEOUT) {
+        // Wait some time between sending requests
+        if (!first_try) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        }
+        first_try = false;
+    
+        if (primary == 0) {
+            result = rbsClient1.Read(offset);
+        } else {
+            result = rbsClient2.Read(offset);
+        }
+    
+        std::cout << primary << ": " << result << std::endl;
+        if (result != BLOCKSTORE_SUCCESS) {
+            primary = 1 - primary;
+        }
+    }
+    
+    return primary;
+}
+
+int do_write(RBSClient &rbsClient1, RBSClient &rbsClient2, int primary, off_t offset, std::string str) {
+    bool first_try = true;
+    int result = -1, retry = 1;
+    uint64_t request_start_time = cur_time();
+
+    while (result != BLOCKSTORE_SUCCESS && cur_time() - request_start_time < TIMEOUT) {
+        if (!first_try) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        }
+        first_try = false;
+
+        if(primary == 0) {
+            result = rbsClient1.Write(offset, std::string(str)); 
+        } else {
+            result = rbsClient2.Write(offset, std::string(str));
+        }
+
+        std::cout << primary << ": " << result << std::endl;
+        if (result != BLOCKSTORE_SUCCESS) {
+            primary = 1 - primary;
+        }
+    }
+
+    return primary;
+}
+
 int main(int argc, char** argv) {
 
   std::string server1 = argv[1];
@@ -134,43 +188,35 @@ int main(int argc, char** argv) {
       grpc::CreateChannel(server2, grpc::InsecureChannelCredentials()));
 
   int user_input;
-  std::cout << "Enter operation: ";
-  std::cin >> user_input;    // input = 1 for read, 2 for write, 0 to exit
   off_t offset;
   std::string str;
   uint64_t request_start_time;
-  const uint64_t TIMEOUT = 7000;
-  bool first_try;
   int primary=0;
+
+  // one-of read
+  if (argc == 4) {
+    offset = std::stoull(std::string(argv[3]));
+    do_read(rbsClient1, rbsClient2, primary, offset);
+    return 0;
+  }
+  // one-of write
+  if (argc == 5) {
+    offset = std::stoull(std::string(argv[3]));
+    str = std::string(argv[4]);
+    str.resize(4096, ' ');
+    do_write(rbsClient1, rbsClient2, primary, offset, str);
+    return 0;
+  }
+
+  std::cout << "Enter operation: ";
+  std::cin >> user_input;    // input = 1 for read, 2 for write, 0 to exit
   while(user_input != 0) {
 
     std::cout << "Enter offset: " << std::endl;
     std::cin >> offset;
 
-    first_try = true;
     if(user_input == 1) {
-
-        int result = -1, retry = 1;
-        request_start_time = cur_time();
-
-        while (result != BLOCKSTORE_SUCCESS && cur_time() - request_start_time < TIMEOUT) {
-            // Wait some time between sending requests
-            if (!first_try) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            }
-            first_try = false;
-
-            if (primary == 0) {
-                result = rbsClient1.Read(offset);
-            } else {
-                result = rbsClient2.Read(offset);
-            }
-
-            std::cout << primary << ": " << result << std::endl;
-            if (result != BLOCKSTORE_SUCCESS) {
-                primary = 1 - primary;
-            }
-        }
+        primary = do_read(rbsClient1, rbsClient2, primary, offset);
     } else {
         
         std::cout << "Enter data to write: " << std::endl;
@@ -182,29 +228,7 @@ int main(int argc, char** argv) {
         str.resize(4096, ' ');
         std::cout << "Hash of data to write: " << std::hash<std::string>{}(str) << std::endl;
 
-        int result = -1, retry = 1;
-        request_start_time = cur_time();
-
-        while (result != BLOCKSTORE_SUCCESS && cur_time() - request_start_time < TIMEOUT) {
-            if (!first_try) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            }
-            first_try = false;
-
-            if(primary == 0) {
-                result = rbsClient1.Write(offset, std::string(str)); 
-            } else {
-                result = rbsClient2.Write(offset, std::string(str));
-            }
-
-            std::cout << primary << ": " << result << std::endl;
-            if (result != BLOCKSTORE_SUCCESS) {
-                primary = 1 - primary;
-            }
-        }
-
-        std::cout << result << std::endl;
-
+        primary = do_write(rbsClient1, rbsClient2, primary, offset, str);
     }
 
     std::cout << "Enter operation: ";

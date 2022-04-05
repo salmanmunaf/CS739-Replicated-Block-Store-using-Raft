@@ -133,23 +133,29 @@ int main(int argc, char** argv) {
   RBSClient rbsClient2(
       grpc::CreateChannel(server2, grpc::InsecureChannelCredentials()));
 
+  auto start = chrono::steady_clock::now();
+
   int user_input;
   std::cout << "Enter operation: ";
-  std::cin >> user_input;    // input = 1 for read, 2 for write, 0 to exit
+  //std::cin >> user_input;    // input = 1 for read, 2 for write, 0 to exit
+  user_input = 1; //all reads
   off_t offset;
   std::string str;
   uint64_t request_start_time;
   const uint64_t TIMEOUT = 7000;
   bool first_try;
   int primary=0;
-  while(user_input != 0) {
+
+  int counter = 0;
+  while(counter != 50) {
 
     std::cout << "Enter offset: " << std::endl;
-    std::cin >> offset;
-
+    //std::cin >> offset;
+    offset = 0;
     first_try = true;
+    cout << "Offset = " << offset << " and the user_input is " << user_input << " and the counter is " << counter << endl;
     if(user_input == 1) {
-
+    	auto startinner = chrono::steady_clock::now();
         int result = -1, retry = 1;
         request_start_time = cur_time();
 
@@ -171,6 +177,10 @@ int main(int argc, char** argv) {
                 primary = 1 - primary;
             }
         }
+        auto endinner = chrono::steady_clock::now();
+        cout << " Inner Elapsed time in milliseconds: "
+                  << chrono::duration_cast<chrono::milliseconds>(endinner - startinner).count()
+                  << " ms" << endl;
     } else {
         
         std::cout << "Enter data to write: " << std::endl;
@@ -207,9 +217,13 @@ int main(int argc, char** argv) {
 
     }
 
-    std::cout << "Enter operation: ";
-    std::cin >> user_input;    // input = 1 for read, 2 for write, 0 to exit
+    //std::cout << "Enter operation: ";
+    counter++;
+    //std::cin >> user_input;    // input = 1 for read, 2 for write, 0 to exit
   }
-
+  auto end = chrono::steady_clock::now();
+  cout << " Total Elapsed time in milliseconds: "
+          << chrono::duration_cast<chrono::milliseconds>(end - start).count()
+          << " ms" << endl;
   return 0;
 }

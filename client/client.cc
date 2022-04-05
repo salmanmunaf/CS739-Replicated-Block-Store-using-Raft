@@ -177,6 +177,14 @@ int do_write(RBSClient &rbsClient1, RBSClient &rbsClient2, int primary, off_t of
     return primary;
 }
 
+void getRandomText(std::string &s, int size) {
+    int num_bytes_written = 0;
+    while (num_bytes_written < size) {
+        s.push_back((rand() % 26) + 'a');
+        num_bytes_written++;
+    }
+}
+
 int main(int argc, char** argv) {
 
   std::string server1 = argv[1];
@@ -208,31 +216,89 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  std::cout << "Enter operation: ";
-  std::cin >> user_input;    // input = 1 for read, 2 for write, 0 to exit
-  while(user_input != 0) {
+  size_t string_size = 4096;
+  srand(time(NULL));
+  getRandomText(str, string_size);
+  str.resize(string_size, ' ');
+//   std::cout << "Random string: " << str << std::endl;
 
-    std::cout << "Enter offset: " << std::endl;
-    std::cin >> offset;
+  unsigned int num_iterations = 500;
 
-    if(user_input == 1) {
-        primary = do_read(rbsClient1, rbsClient2, primary, offset);
-    } else {
-        
-        std::cout << "Enter data to write: " << std::endl;
-        std::cin >> str;
+  //Write latency (4kb block) - aligned
+  offset = 0;
+  for (int i = 0; i < num_iterations; i++) {
+    auto ts_aligned_write_start = std::chrono::steady_clock::now();
+    do_write(rbsClient1, rbsClient2, primary, offset, str);
+    auto ts_aligned_write_end = std::chrono::steady_clock::now();
+    std::cout << "Aligned write (offset = " << offset << ") latency time in milliseconds: "
+				  << std::chrono::duration_cast<std::chrono::milliseconds>(ts_aligned_write_end - ts_aligned_write_start).count()
+				  << " ms" << std::endl;
+    offset += BLOCK_SIZE;
+  }
 
-        // char* str = (char *) malloc(BLOCK_SIZE/sizeof(char));
-        // strcpy(str, data);
+  //Write latency (4kb block) - unaligned
+  offset = 2048;
+  for (int i = 0; i < num_iterations; i++) {
+    auto ts_unaligned_write_start = std::chrono::steady_clock::now();
+    do_write(rbsClient1, rbsClient2, primary, offset, str);
+    auto ts_unaligned_write_end = std::chrono::steady_clock::now();
+    std::cout << "Unaligned write (offset = " << offset << ") latency time in milliseconds: "
+				  << std::chrono::duration_cast<std::chrono::milliseconds>(ts_unaligned_write_end - ts_unaligned_write_start).count()
+				  << " ms" << std::endl;
+    offset += BLOCK_SIZE;
+  }
+  
+  //Read latency - aligned
+  offset = 0;
+  for (int i = 0; i < num_iterations; i++) {
+    auto ts_aligned_read_start = std::chrono::steady_clock::now();
+    primary = do_read(rbsClient1, rbsClient2, primary, offset);
+    auto ts_aligned_read_end = std::chrono::steady_clock::now();
+    std::cout << "Aligned read (offset = " << offset << ") latency time in milliseconds: "
+				  << std::chrono::duration_cast<std::chrono::milliseconds>(ts_aligned_read_end - ts_aligned_read_start).count()
+				  << " ms" << std::endl;
+    offset += BLOCK_SIZE;
+  }
 
-        str.resize(4096, ' ');
-        std::cout << "Hash of data to write: " << std::hash<std::string>{}(str) << std::endl;
+  //Read latency - unaligned
+  offset = 2048;
+  for (int i = 0; i < num_iterations; i++) {
+    auto ts_unaligned_read_start = std::chrono::steady_clock::now();
+    primary = do_read(rbsClient1, rbsClient2, primary, offset);
+    auto ts_unaligned_read_end = std::chrono::steady_clock::now();
+    std::cout << "Unaligned read (offset = " << offset << ") latency time in milliseconds: "
+				  << std::chrono::duration_cast<std::chrono::milliseconds>(ts_unaligned_read_end - ts_unaligned_read_start).count()
+				  << " ms" << std::endl;
+    offset += BLOCK_SIZE;
+  }
 
-        primary = do_write(rbsClient1, rbsClient2, primary, offset, str);
-    }
+  // diff write size - aligned
+  offset = 0;
+  while (string_size > 100) {
+    auto ts_aligned_write_start = std::chrono::steady_clock::now();
+    primary = do_write(rbsClient1, rbsClient2, primary, offset, str);
+    auto ts_aligned_write_end = std::chrono::steady_clock::now();
+    std::cout << "Aligned write (offset = 0, size = " << string_size << ") latency time in milliseconds: "
+				  << std::chrono::duration_cast<std::chrono::milliseconds>(ts_aligned_write_end - ts_aligned_write_start).count()
+				  << " ms" << std::endl;
+    string_size -= 100;
+    str.resize(string_size, ' ');
+  }
 
-    std::cout << "Enter operation: ";
-    std::cin >> user_input;    // input = 1 for read, 2 for write, 0 to exit
+  //diff write size - unaligned
+  string_size = 4096;
+  getRandomText(str, string_size);
+  str.resize(string_size, ' ');
+  offset = 2048;
+  while (string_size > 100) {
+    auto ts_unaligned_write_start = std::chrono::steady_clock::now();
+    primary = do_write(rbsClient1, rbsClient2, primary, offset, str);
+    auto ts_unaligned_write_end = std::chrono::steady_clock::now();
+    std::cout << "Unaligned write (offset = 2048, size = " << string_size << ") latency time in milliseconds: "
+				  << std::chrono::duration_cast<std::chrono::milliseconds>(ts_unaligned_write_end - ts_unaligned_write_start).count()
+				  << " ms" << std::endl;
+    string_size -= 100;
+    str.resize(string_size, ' ');
   }
 
   return 0;

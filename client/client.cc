@@ -179,7 +179,7 @@ int main(int argc, char** argv) {
         }
         auto endinner = std::chrono::steady_clock::now();
         std::cout << " Inner Elapsed time in milliseconds: "
-                  << chrono::duration_cast<std::chrono::milliseconds>(endinner - startinner).count()
+                  << std::chrono::duration_cast<std::chrono::milliseconds>(endinner - startinner).count()
                   << " ms" << std::endl;
     } else {
         
@@ -222,7 +222,7 @@ int main(int argc, char** argv) {
     //std::cin >> user_input;    // input = 1 for read, 2 for write, 0 to exit
   }
   auto end = std::chrono::steady_clock::now();
-  cout << " Total Elapsed time in milliseconds: "
+  std::cout << " Total Elapsed time in milliseconds: "
           << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
           << " ms" << std::endl;
   return 0;

@@ -138,7 +138,7 @@ int main(int argc, char** argv) {
   int user_input;
   std::cout << "Enter operation: ";
   //std::cin >> user_input;    // input = 1 for read, 2 for write, 0 to exit
-  user_input = 2; //all writes
+  user_input = 1; //all reads
   off_t offset;
   std::string str;
   uint64_t request_start_time;

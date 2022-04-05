@@ -20,6 +20,7 @@
 #include <memory>
 #include <string>
 #include <mutex>
+#include <shared_mutex>
 #include <queue>
 #include <atomic>
 #include <chrono>
@@ -55,7 +56,7 @@ using namespace cs739;
 #define MAX_NUM_BLOCKS (1000)
 #define KB (1024)
 #define BLOCK_SIZE (4*KB)
-std::mutex lockArray [MAX_NUM_BLOCKS];
+std::shared_mutex lockArray [MAX_NUM_BLOCKS];
 std::mutex queue_lock; //lock to ensure atomicity in queue operations
 const std::string FILE_PATH = "blockstore.log";
 
@@ -344,6 +345,7 @@ class RBSImpl final : public RBS::Service {
     std::cout << "Data to read at offset: " << request->address() << std::endl;
     char* buf;
     uint64_t address = request->address();
+    uint64_t block = address / BLOCK_SIZE;
     int ret;
 
     // Return without doing anything if we are not the primary
@@ -355,7 +357,18 @@ class RBSImpl final : public RBS::Service {
     buf = new char[BLOCK_SIZE];
 
     // Read the data from the first block
+    lockArray[block].lock_shared();
+    if (!is_block_aligned(address)) {
+      lockArray[block + 1].lock_shared();
+    }
+
     ret = read_block_data(FILE_PATH, buf, address);
+
+    if (!is_block_aligned(address)) {
+      lockArray[block + 1].unlock_shared();
+    }
+    lockArray[block].unlock_shared();
+
     if (ret < 0) {
       goto err;
     }

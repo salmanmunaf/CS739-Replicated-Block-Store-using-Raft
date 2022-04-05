@@ -133,7 +133,7 @@ int main(int argc, char** argv) {
   RBSClient rbsClient2(
       grpc::CreateChannel(server2, grpc::InsecureChannelCredentials()));
 
-  auto start = chrono::steady_clock::now();
+  auto start = std::chrono::steady_clock::now();
 
   int user_input;
   std::cout << "Enter operation: ";
@@ -153,9 +153,9 @@ int main(int argc, char** argv) {
     //std::cin >> offset;
     offset = 0;
     first_try = true;
-    cout << "Offset = " << offset << " and the user_input is " << user_input << " and the counter is " << counter << endl;
+    std::cout << "Offset = " << offset << " and the user_input is " << user_input << " and the counter is " << counter << std::endl;
     if(user_input == 1) {
-    	auto startinner = chrono::steady_clock::now();
+    	auto startinner = std::chrono::steady_clock::now();
         int result = -1, retry = 1;
         request_start_time = cur_time();
 
@@ -177,10 +177,10 @@ int main(int argc, char** argv) {
                 primary = 1 - primary;
             }
         }
-        auto endinner = chrono::steady_clock::now();
-        cout << " Inner Elapsed time in milliseconds: "
-                  << chrono::duration_cast<chrono::milliseconds>(endinner - startinner).count()
-                  << " ms" << endl;
+        auto endinner = std::chrono::steady_clock::now();
+        std::cout << " Inner Elapsed time in milliseconds: "
+                  << chrono::duration_cast<std::chrono::milliseconds>(endinner - startinner).count()
+                  << " ms" << std::endl;
     } else {
         
         std::cout << "Enter data to write: " << std::endl;
@@ -221,9 +221,9 @@ int main(int argc, char** argv) {
     counter++;
     //std::cin >> user_input;    // input = 1 for read, 2 for write, 0 to exit
   }
-  auto end = chrono::steady_clock::now();
+  auto end = std::chrono::steady_clock::now();
   cout << " Total Elapsed time in milliseconds: "
-          << chrono::duration_cast<chrono::milliseconds>(end - start).count()
-          << " ms" << endl;
+          << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
+          << " ms" << std::endl;
   return 0;
 }

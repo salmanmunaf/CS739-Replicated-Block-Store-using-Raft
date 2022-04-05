@@ -146,14 +146,14 @@ int main(int argc, char** argv) {
   bool first_try;
   int primary=0;
 
-  offset = 0;
+  //offset = 0;
   int counter = 0;
   while(counter != 50) {
 
     std::cout << "Enter offset: " << std::endl;
     //std::cin >> offset;
-    //offset = 0;
-    offset+=1024;
+    offset = 0;
+    //offset+=1024;
     first_try = true;
     std::cout << "Offset = " << offset << " and the user_input is " << user_input << " and the counter is " << counter << std::endl;
     if(user_input == 1) {
@@ -184,7 +184,7 @@ int main(int argc, char** argv) {
                   << std::chrono::duration_cast<std::chrono::milliseconds>(endinner - startinner).count()
                   << " ms" << std::endl;
     } else {
-        
+    	auto startinner = std::chrono::steady_clock::now();
         std::cout << "Enter data to write: " << std::endl;
         //std::cin >> str;
         str = "Distributed Systems";
@@ -218,6 +218,11 @@ int main(int argc, char** argv) {
         }
 
         std::cout << result << std::endl;
+
+        auto endinner = std::chrono::steady_clock::now();
+		std::cout << " Inner Elapsed time in milliseconds: "
+				  << std::chrono::duration_cast<std::chrono::milliseconds>(endinner - startinner).count()
+				  << " ms" << std::endl;
 
     }
 

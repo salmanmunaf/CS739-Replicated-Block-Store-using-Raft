@@ -148,8 +148,9 @@ int main(int argc, char** argv) {
 
   auto read_lat = 0;
   //offset = 0;
+  int iter = 1000;
   int counter = 0;
-  while(counter != 1000) {
+  while(counter != iter) {
 
     std::cout << "Enter offset: " << std::endl;
     //std::cin >> offset;
@@ -236,7 +237,7 @@ int main(int argc, char** argv) {
   std::cout << " Total Elapsed time in milliseconds: "
           << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
           << " ms" << std::endl;
-  read_lat = read_lat/50;
+  read_lat = read_lat/iter;
   std::cout << "The mean latency for 50 reads is " << read_lat << std::endl;
   return 0;
 }

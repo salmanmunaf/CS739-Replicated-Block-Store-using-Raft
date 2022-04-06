@@ -149,7 +149,7 @@ int main(int argc, char** argv) {
   auto read_lat = 0;
   //offset = 0;
   int counter = 0;
-  while(counter != 50) {
+  while(counter != 1000) {
 
     std::cout << "Enter offset: " << std::endl;
     //std::cin >> offset;

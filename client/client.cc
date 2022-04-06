@@ -142,7 +142,7 @@ int do_read(RBSClient &rbsClient1, RBSClient &rbsClient2, int primary, off_t off
             result = rbsClient2.Read(offset);
         }
     
-        std::cout << primary << ": " << result << std::endl;
+        // std::cout << primary << ": " << result << std::endl;
         if (result != BLOCKSTORE_SUCCESS) {
             primary = 1 - primary;
         }
@@ -168,7 +168,7 @@ int do_write(RBSClient &rbsClient1, RBSClient &rbsClient2, int primary, off_t of
             result = rbsClient2.Write(offset, std::string(str));
         }
 
-        std::cout << primary << ": " << result << std::endl;
+        // std::cout << primary << ": " << result << std::endl;
         if (result != BLOCKSTORE_SUCCESS) {
             primary = 1 - primary;
         }
@@ -200,6 +200,8 @@ int main(int argc, char** argv) {
   std::string str;
   uint64_t request_start_time;
   int primary=0;
+  std::ofstream myfile;
+  myfile.open("aligned_measurements.txt");
 
   // one-of read
   if (argc == 4) {
@@ -222,55 +224,71 @@ int main(int argc, char** argv) {
   str.resize(string_size, ' ');
 //   std::cout << "Random string: " << str << std::endl;
 
-  unsigned int num_iterations = 500;
+  unsigned int num_iterations = 1000;
+  auto sum = 0;
 
   //Write latency (4kb block) - aligned
   offset = 0;
   for (int i = 0; i < num_iterations; i++) {
     auto ts_aligned_write_start = std::chrono::steady_clock::now();
-    do_write(rbsClient1, rbsClient2, primary, offset, str);
+    primary = do_write(rbsClient1, rbsClient2, primary, offset, str);
     auto ts_aligned_write_end = std::chrono::steady_clock::now();
-    std::cout << "Aligned write (offset = " << offset << ") latency time in milliseconds: "
-				  << std::chrono::duration_cast<std::chrono::milliseconds>(ts_aligned_write_end - ts_aligned_write_start).count()
-				  << " ms" << std::endl;
+    // std::cout << "Aligned write (offset = " << offset << ") latency time in milliseconds: "
+	// 			  << std::chrono::duration_cast<std::chrono::milliseconds>(ts_aligned_write_end - ts_aligned_write_start).count()
+	// 			  << " ms" << std::endl;
+    sum += std::chrono::duration_cast<std::chrono::milliseconds>(ts_aligned_write_end - ts_aligned_write_start).count();
     offset += BLOCK_SIZE;
   }
+  auto mean = sum/num_iterations;
+  myfile << "Mean aligned write latency time in milliseconds: " << mean << " ms" << std::endl;
 
   //Write latency (4kb block) - unaligned
+  sum = 0;
   offset = 2048;
   for (int i = 0; i < num_iterations; i++) {
     auto ts_unaligned_write_start = std::chrono::steady_clock::now();
-    do_write(rbsClient1, rbsClient2, primary, offset, str);
+    primary = do_write(rbsClient1, rbsClient2, primary, offset, str);
     auto ts_unaligned_write_end = std::chrono::steady_clock::now();
-    std::cout << "Unaligned write (offset = " << offset << ") latency time in milliseconds: "
-				  << std::chrono::duration_cast<std::chrono::milliseconds>(ts_unaligned_write_end - ts_unaligned_write_start).count()
-				  << " ms" << std::endl;
+    // std::cout << "Unaligned write (offset = " << offset << ") latency time in milliseconds: "
+	// 			  << std::chrono::duration_cast<std::chrono::milliseconds>(ts_unaligned_write_end - ts_unaligned_write_start).count()
+	// 			  << " ms" << std::endl;
+    sum += std::chrono::duration_cast<std::chrono::milliseconds>(ts_unaligned_write_end - ts_unaligned_write_start).count();
     offset += BLOCK_SIZE;
   }
+  mean = sum/num_iterations;
+  myfile << "Mean unaligned write latency time in milliseconds: " << mean << " ms" << std::endl;
   
   //Read latency - aligned
+  sum = 0;
   offset = 0;
   for (int i = 0; i < num_iterations; i++) {
     auto ts_aligned_read_start = std::chrono::steady_clock::now();
     primary = do_read(rbsClient1, rbsClient2, primary, offset);
     auto ts_aligned_read_end = std::chrono::steady_clock::now();
-    std::cout << "Aligned read (offset = " << offset << ") latency time in milliseconds: "
-				  << std::chrono::duration_cast<std::chrono::milliseconds>(ts_aligned_read_end - ts_aligned_read_start).count()
-				  << " ms" << std::endl;
+    // std::cout << "Aligned read (offset = " << offset << ") latency time in milliseconds: "
+	// 			  << std::chrono::duration_cast<std::chrono::milliseconds>(ts_aligned_read_end - ts_aligned_read_start).count()
+	// 			  << " ms" << std::endl;
+    sum += std::chrono::duration_cast<std::chrono::microseconds>(ts_aligned_read_end - ts_aligned_read_start).count();
     offset += BLOCK_SIZE;
   }
+  mean = sum/num_iterations;
+  myfile << "Mean aligned read latency time in microseconds: " << mean << " μs" << std::endl;
 
   //Read latency - unaligned
+  sum = 0;
   offset = 2048;
   for (int i = 0; i < num_iterations; i++) {
     auto ts_unaligned_read_start = std::chrono::steady_clock::now();
     primary = do_read(rbsClient1, rbsClient2, primary, offset);
     auto ts_unaligned_read_end = std::chrono::steady_clock::now();
-    std::cout << "Unaligned read (offset = " << offset << ") latency time in milliseconds: "
-				  << std::chrono::duration_cast<std::chrono::milliseconds>(ts_unaligned_read_end - ts_unaligned_read_start).count()
-				  << " ms" << std::endl;
+    // std::cout << "Unaligned read (offset = " << offset << ") latency time in milliseconds: "
+	// 			  << std::chrono::duration_cast<std::chrono::milliseconds>(ts_unaligned_read_end - ts_unaligned_read_start).count()
+	// 			  << " ms" << std::endl;
+    sum += std::chrono::duration_cast<std::chrono::microseconds>(ts_unaligned_read_end - ts_unaligned_read_start).count();
     offset += BLOCK_SIZE;
   }
+  mean = sum/num_iterations;
+  myfile << "Mean unaligned read latency time in microseconds: " << mean << " μs" << std::endl;
 
   // diff write size - aligned
   offset = 0;
@@ -278,7 +296,7 @@ int main(int argc, char** argv) {
     auto ts_aligned_write_start = std::chrono::steady_clock::now();
     primary = do_write(rbsClient1, rbsClient2, primary, offset, str);
     auto ts_aligned_write_end = std::chrono::steady_clock::now();
-    std::cout << "Aligned write (offset = 0, size = " << string_size << ") latency time in milliseconds: "
+    myfile << "Aligned write (offset = 0, size = " << string_size << ") latency time in milliseconds: "
 				  << std::chrono::duration_cast<std::chrono::milliseconds>(ts_aligned_write_end - ts_aligned_write_start).count()
 				  << " ms" << std::endl;
     string_size -= 100;
@@ -294,12 +312,14 @@ int main(int argc, char** argv) {
     auto ts_unaligned_write_start = std::chrono::steady_clock::now();
     primary = do_write(rbsClient1, rbsClient2, primary, offset, str);
     auto ts_unaligned_write_end = std::chrono::steady_clock::now();
-    std::cout << "Unaligned write (offset = 2048, size = " << string_size << ") latency time in milliseconds: "
+    myfile << "Unaligned write (offset = 2048, size = " << string_size << ") latency time in milliseconds: "
 				  << std::chrono::duration_cast<std::chrono::milliseconds>(ts_unaligned_write_end - ts_unaligned_write_start).count()
 				  << " ms" << std::endl;
     string_size -= 100;
     str.resize(string_size, ' ');
   }
+
+  myfile.close();
 
   return 0;
 }

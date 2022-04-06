@@ -146,6 +146,7 @@ int main(int argc, char** argv) {
   bool first_try;
   int primary=0;
 
+  float read_lat = 0;
   //offset = 0;
   int counter = 0;
   while(counter != 50) {
@@ -180,9 +181,10 @@ int main(int argc, char** argv) {
             }
         }
         auto endinner = std::chrono::steady_clock::now();
-        std::cout << " Inner Elapsed time in milliseconds: "
-                  << std::chrono::duration_cast<std::chrono::milliseconds>(endinner - startinner).count()
+        std::cout << " Inner Elapsed time in microiseconds: "
+                  << std::chrono::duration_cast<std::chrono::microseconds>(endinner - startinner).count()
                   << " ms" << std::endl;
+        read_lat += std::chrono::duration_cast<std::chrono::microseconds>(endinner - startinner).count()
     } else {
     	auto startinner = std::chrono::steady_clock::now();
         std::cout << "Enter data to write: " << std::endl;

@@ -146,7 +146,7 @@ int main(int argc, char** argv) {
   bool first_try;
   int primary=0;
 
-  float read_lat = 0;
+  auto read_lat = 0;
   //offset = 0;
   int counter = 0;
   while(counter != 50) {
@@ -236,5 +236,7 @@ int main(int argc, char** argv) {
   std::cout << " Total Elapsed time in milliseconds: "
           << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
           << " ms" << std::endl;
+  read_lat = read_lat/50;
+  std::cout << "The mean latency for 50 reads is " << read_lat << std::endl;
   return 0;
 }

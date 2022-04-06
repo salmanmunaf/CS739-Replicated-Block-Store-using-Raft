@@ -148,7 +148,7 @@ int main(int argc, char** argv) {
 
   //offset = 0;
   int counter = 0;
-  while(counter != 25) {
+  while(counter != 50) {
 
     std::cout << "Enter offset: " << std::endl;
     //std::cin >> offset;

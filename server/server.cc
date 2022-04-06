@@ -526,7 +526,8 @@ void RunServer(std::string listen_port, std::string other_server) {
 
 //when the backup comes back again, the primary transfers the log to backup
 int LogTransfer(PBInterfaceClient &pb_client) {
-  int ret;
+	auto start = std::chrono::steady_clock::now();
+	int ret;
 
   while (data_log.empty() == 0) {
 	  ret = pb_client.CopyToSecondary(address_log.front(), data_log.front());
@@ -540,6 +541,10 @@ int LogTransfer(PBInterfaceClient &pb_client) {
 		  return ret;
 	  }
   }
+  auto end = std::chrono::steady_clock::now();
+  std::cout << " Total Elapsed time for data integration in milliseconds: "
+            << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
+            << " ms" << std::endl;
   return 0;
 }
 

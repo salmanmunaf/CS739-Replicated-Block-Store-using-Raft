@@ -184,7 +184,7 @@ int main(int argc, char** argv) {
         std::cout << " Inner Elapsed time in microiseconds: "
                   << std::chrono::duration_cast<std::chrono::microseconds>(endinner - startinner).count()
                   << " ms" << std::endl;
-        read_lat += std::chrono::duration_cast<std::chrono::microseconds>(endinner - startinner).count()
+        read_lat += std::chrono::duration_cast<std::chrono::microseconds>(endinner - startinner).count();
     } else {
     	auto startinner = std::chrono::steady_clock::now();
         std::cout << "Enter data to write: " << std::endl;

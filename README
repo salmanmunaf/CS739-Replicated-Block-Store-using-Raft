@@ -1,0 +1,21 @@
+setup.sh installs dependencies, clones and builds grpc, and generates a Makefile in the directory cmake/build
+
+1.1 Replication Strategy
+    The primary/backup replication strategy is basically the entirety of server/server.cc
+1.2 Durability
+    server/server.cc: 126-178, 251-289
+1.3 Crash Recovery Protocol
+    server/server.cc: 195-249, 417-431, 528-587, 607-621
+2.1 Correctness
+    Availability:
+        server/server.cc: 546-587
+        client/client.cc: 146-148, 172-174
+    Strong Consistency:
+        server/server.cc: 59, 359-370, 409-442
+    Testing Strategy:
+        server/server.cc: 263-272
+2.2 Performance
+    There aren't any concrete lines of code to point to here.
+    We measured this by adding measurement code to the client that was later removed.
+
+Demo videos of performance are here: https://drive.google.com/drive/folders/1qoISpaF0hyk2rpJqUxGmOJYN-Fg_hEwg?usp=sharing

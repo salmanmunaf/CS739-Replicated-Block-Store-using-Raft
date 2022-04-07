@@ -15,7 +15,7 @@ setup.sh installs dependencies, clones and builds grpc, and generates a Makefile
     Testing Strategy:
         server/server.cc: 263-272
 2.2 Performance
-    There aren't any concrete lines of code to point to here.
-    We measured this by adding measurement code to the client that was later removed.
+    There aren't any concrete lines of code to point to here. 
+    We created other branches to add code for measurement experiments.
 
 Demo videos of performance are here: https://drive.google.com/drive/folders/1qoISpaF0hyk2rpJqUxGmOJYN-Fg_hEwg?usp=sharing

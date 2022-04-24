@@ -49,9 +49,6 @@ using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::Status;
 using namespace cs739;
-// using helloworld::Greeter;
-// using helloworld::HelloReply;
-// using helloworld::HelloRequest;
 
 #define MAX_NUM_BLOCKS (1000)
 #define KB (1024)
@@ -288,57 +285,27 @@ err:
   return Status::OK;
 }
 
-class PBInterfaceClient {
+// Class is used to send RPCs to other clients
+class RaftInterfaceClient {
   public:
-    PBInterfaceClient(std::shared_ptr<Channel> channel)
-      : stub_(PBInterface::NewStub(channel)) {}
+    RaftInterfaceClient(std::shared_ptr<Channel> channel)
+      : stub_(RaftInterface::NewStub(channel)) {}
+
+    int RequestVote() {
+      return 0;
+    }
 
     int Heartbeat() {
-      ClientContext context;
-      EmptyPacket request, response;
-
-      Status status = stub_->Heartbeat(&context, request, &response);
-
-      if (status.ok()) {
-        return 0;
-      } else {
-        return -1;
-      }
+      return 0;
     }
 
-    int CopyToSecondary(uint64_t address, std::string data) {
-      ClientContext context;
-      WriteRequest request;
-      Response response;
-
-      request.set_address(address);
-      request.set_data(data);
-
-      Status status = stub_->CopyToSecondary(&context, request, &response);
-
-      if (status.ok()) {
-        if(response.return_code() == 1) {
-            return response.return_code();
-        }
-        return -response.error_code();
-      } else {
-        return -1;
-      }
-    }
   private:
-    std::unique_ptr<PBInterface::Stub> stub_;
+    std::unique_ptr<RaftInterface::Stub> stub_;
 };
 
 // Logic and data behind the server's behavior.
 class RBSImpl final : public RBS::Service {
-  // Status SayHello(ServerContext* context, const HelloRequest* request,
-  //                 HelloReply* reply) override {
-  //   std::string prefix("Hello ");
-  //   reply->set_message(prefix + request->name());
-  //   return Status::OK;
-  // }
-  PBInterfaceClient pb_client;
-
+  std::vector<RaftInterfaceClient> servers;
 
   Status Read(ServerContext* context, const ReadRequest* request,
                   Response* reply) override {
@@ -414,22 +381,9 @@ err:
     }
 
     // If we think the backup is up, we better forward the data to it
-    if (backup_up.load()) {
-      ret = pb_client.CopyToSecondary(request->address(), request->data());
-      // If it failed, add the write to the queue and move on
-      if (ret < 0) {
-        queue_lock.lock();
-        backup_up = false;
-        data_log.push(request->data());
-        address_log.push(request->address());
-        queue_lock.unlock();
-      }
-    } else {
-      queue_lock.lock();
-      data_log.push(request->data());
-      address_log.push(request->address());
-      queue_lock.unlock();
-    }
+    /*
+     * TODO: Write replication strategy
+     */
 
     // The data should be persisted locally and is either persisted on the primary
     // or we have added it to the queue to do so, so we can delete the undo file
@@ -444,67 +398,32 @@ unlock:
     return status;
   }
 public:
-  RBSImpl(std::string other_server)
-    : pb_client(grpc::CreateChannel(other_server, grpc::InsecureChannelCredentials()))
-  {}
+  RBSImpl(std::vector<std::string> other_servers)
+  {
+    for (auto it = other_servers.begin(); it != other_servers.end(); it++) {
+      servers.push_back(grpc::CreateChannel(*it, grpc::InsecureChannelCredentials()));
+    }
+  }
 
 };
 
-class PBInterfaceImpl final : public PBInterface::Service {
-  PBInterfaceClient pb_client;
-
-  Status Heartbeat(ServerContext* context, const EmptyPacket* request,
-                EmptyPacket* reply) override {
-    std::cout << "Received Heartbeat\n";
-
-    // Update when we last heard from the server
-    last_comm_time = cur_time();
-
-    // Simply respond with a success
+// Class that handles incoming RPCs
+class RaftInterfaceImpl final : public RaftInterface::Service {
+  Status RequestVote(ServerContext *context, const RequestVoteRequest *request,
+                RequestVoteResponse *reply) override {
     return Status::OK;
   }
 
-  /********************************************************************************/
-
-  Status CopyToSecondary(ServerContext* context, const WriteRequest* request,
-                Response* reply) override {
-    Status status;            
-    uint64_t address = request->address();
-    uint64_t block = address / BLOCK_SIZE;
-    std::string undo_path = FILE_PATH + "." + std::to_string(address) + ".undo";
-
-    std::cout << "Data from primary: " << request->data() << std::endl;
-
-    // Update when we last heard from the primary
-    last_comm_time = cur_time();
-
-    lockArray[block].lock();
-    if (!is_block_aligned(address)) {
-      lockArray[block + 1].lock();
-    }
-
-    // Actually do the write
-    status = do_atomic_write(request, reply, undo_path);
-    unlink(undo_path.c_str());
-
-    if (!is_block_aligned(address)) {
-      lockArray[block + 1].unlock();
-    }
-    lockArray[block].unlock();
-
-    return status;
+  Status AppendEntries(ServerContext *context, const AppendEntriesRequest * request,
+                AppendEntriesResponse *reply) override {
+    return Status::OK;
   }
-
-public:
-  PBInterfaceImpl(std::string other_server)
-    : pb_client(grpc::CreateChannel(other_server, grpc::InsecureChannelCredentials()))
-  {}
 };
 
-void RunServer(std::string listen_port, std::string other_server) {
+void RunServer(std::string listen_port, std::vector<std::string> other_servers) {
   std::string server_address("0.0.0.0:" + listen_port);
-  PBInterfaceImpl pb_service(other_server);
-  RBSImpl service(other_server);
+  RaftInterfaceImpl raft_service;
+  RBSImpl service(other_servers);
 
   grpc::EnableDefaultHealthCheckService(true);
   grpc::reflection::InitProtoReflectionServerBuilderPlugin();
@@ -514,7 +433,7 @@ void RunServer(std::string listen_port, std::string other_server) {
   // Register "service" as the instance through which we'll communicate with
   // clients. In this case it corresponds to an *synchronous* service.
   builder.RegisterService(&service);
-  builder.RegisterService(&pb_service);
+  builder.RegisterService(&raft_service);
   // Finally assemble the server.
   std::unique_ptr<Server> server(builder.BuildAndStart());
   std::cout << "Server listening on " << server_address << std::endl;
@@ -524,66 +443,10 @@ void RunServer(std::string listen_port, std::string other_server) {
   server->Wait();
 }
 
-//when the backup comes back again, the primary transfers the log to backup
-int LogTransfer(PBInterfaceClient &pb_client) {
-  int ret;
-
-  while (data_log.empty() == 0) {
-	  ret = pb_client.CopyToSecondary(address_log.front(), data_log.front());
-
-	  if (ret >= 0) {
-			queue_lock.lock();
-			address_log.pop();
-			data_log.pop();
-			queue_lock.unlock();
-	  } else {
-		  return ret;
-	  }
-  }
-  return 0;
-}
-
-void handle_heartbeats(std::string other_server) {
-  PBInterfaceClient pb_client(
-      grpc::CreateChannel(other_server, grpc::InsecureChannelCredentials())
-  );
-  const int PRIMARY_TIMEOUT = 5000;
-  int ret;
-
-  while(true) {
-    // If we are the primary, give a heartbeat to the backup
-    if (is_primary.load()) {
-      ret = pb_client.Heartbeat();
-
-      if (ret != 0) {
-        // If the heart beat is not responded to, assume the backup is down
-        backup_up = false;
-      } else {
-        // If this is the first successful heartbeat since the backup went down,
-        // send out the queued changes
-        if (!backup_up) {
-          ret = LogTransfer(pb_client);
-          // Only say the backup is up and running if our entire queue was
-          // emptied successfully.
-          if (ret == 0) {
-            backup_up = true;
-          }
-        }
-      }
-    } else {
-      // If we haven't heard from the server in over 5 seconds, assume
-      // the primary has failed and take over
-      uint64_t last_time = last_comm_time.load();
-      uint64_t cur = cur_time();
-
-      if (cur_time() > last_time && cur_time() - last_comm_time.load() >= PRIMARY_TIMEOUT) {
-        std::cout << "Becoming the primary!\n";
-        is_primary = true;
-        backup_up = false;
-      }
-    }
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-  }
+void handle_heartbeats(std::vector<std::string> other_servers) {
+  /*
+   * TODO: Send out heartbeats if necessary
+   */
 }
 
 int main(int argc, char** argv) {
@@ -593,6 +456,9 @@ int main(int argc, char** argv) {
   }
   std::string listen_port = argv[1];
   std::string other_server = argv[2];
+  std::vector<std::string> other_servers;
+  other_servers.push_back(other_server);
+
   if (argc >= 4)
     is_primary = true;
 
@@ -623,9 +489,9 @@ int main(int argc, char** argv) {
   // On startup, give the primary an extra few seconds to send a heartbeat
   last_comm_time = cur_time() + 10000;
 
-  std::thread server_thread(RunServer, listen_port, other_server);
+  std::thread server_thread(RunServer, listen_port, other_servers);
 
-  handle_heartbeats(other_server);
+  handle_heartbeats(other_servers);
 
   return 0;
 }

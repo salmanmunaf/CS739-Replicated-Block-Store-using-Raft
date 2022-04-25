@@ -460,6 +460,32 @@ class RaftInterfaceImpl final : public RaftInterface::Service {
 
   Status AppendEntries(ServerContext *context, const AppendEntriesRequest * request,
                 AppendEntriesResponse *reply) override {
+
+      uint64_t requestTerm = request->term();
+
+      if(state == STATE_LEADER) {
+        if(requestTerm > curTerm) {
+          state = STATE_FOLLOWER;
+          // reply->set_success(true);
+        }
+        reply->set_success(false);
+
+      } else {
+
+        // check on valid term
+        if(requestTerm < curTerm) {
+          reply->set_term(curTerm);
+          reply->set_success(false);
+        }
+
+        state = STATE_FOLLOWER;
+        curTerm = requestTerm;
+
+        reply->set_term(curTerm);
+        reply->set_success(true);
+
+      }
+
     return Status::OK;
   }
 };

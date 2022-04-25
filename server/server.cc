@@ -53,16 +53,26 @@ using namespace cs739;
 #define MAX_NUM_BLOCKS (1000)
 #define KB (1024)
 #define BLOCK_SIZE (4*KB)
+#define HAVENT_VOTED (-1)
+
 std::shared_mutex lockArray [MAX_NUM_BLOCKS];
 std::mutex queue_lock; //lock to ensure atomicity in queue operations
 const std::string FILE_PATH = "blockstore.log";
+
+enum server_state {
+    STATE_LEADER,
+    STATE_FOLLOWER,
+    STATE_CANDIDATE
+};
 
 uint64_t time_since_last_response = 0;
 std::queue<std::string> data_log; //queue to log data to send to backup
 std::queue<uint64_t> address_log; //queue to log address to send to backup
 std::atomic<bool> is_primary(false);
-std::atomic<bool> backup_up(false);
 std::atomic<uint64_t> last_comm_time(0);
+std::atomic<uint64_t> curTerm(0);
+std::atomic<int64_t> voted_for(HAVENT_VOTED);
+enum server_state state;
 
 bool is_block_aligned(uint64_t addr) {
   return (addr & (BLOCK_SIZE - 1)) == 0;
@@ -411,6 +421,40 @@ public:
 class RaftInterfaceImpl final : public RaftInterface::Service {
   Status RequestVote(ServerContext *context, const RequestVoteRequest *request,
                 RequestVoteResponse *reply) override {
+    static std::mutex vote_lock;
+    uint64_t requestTerm = request->term();
+    uint64_t candidateId = request->candidate_id();
+
+    // Use a lock to make sure we don't respond to two simultaneous vote requests
+    vote_lock.lock();
+
+    if (requestTerm > curTerm) {
+      state = STATE_FOLLOWER;
+      curTerm = requestTerm;
+      voted_for = candidateId;
+      reply->set_term(requestTerm);
+      reply->set_vote_granted(true);
+    } else if (state == STATE_LEADER) {
+      // From the last if case, we know that requestTerm <= curTerm
+      // and we're the leader, so let the requester know we're the leader
+      reply->set_term(curTerm);
+      reply->set_vote_granted(false);
+    } else {
+      if (requestTerm < curTerm || voted_for != HAVENT_VOTED) {
+        reply->set_term(curTerm);
+        reply->set_vote_granted(false);
+      } else {
+        // If we're a candidate, this sets us back to being a follower
+        state = STATE_FOLLOWER;
+
+        curTerm = requestTerm;
+        voted_for = candidateId;
+        reply->set_term(requestTerm);
+        reply->set_vote_granted(true);
+      }
+    }
+
+    vote_lock.unlock();
     return Status::OK;
   }
 

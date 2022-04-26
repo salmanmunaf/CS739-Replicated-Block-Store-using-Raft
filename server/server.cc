@@ -338,6 +338,18 @@ class RaftInterfaceClient {
       }
     }
 
+    static void EmptyAppendEntries(std::unique_ptr<RaftInterface::Stub> &stub, uint64_t term)
+    {
+      ClientContext context;
+      AppendEntriesRequest request;
+      AppendEntriesResponse response;
+
+      request.set_term(curTerm);
+      request.set_leader_id(server_id);
+
+      stub->AppendEntries(&context, request, &response);
+    }
+
   public:
     RaftInterfaceClient(std::vector<std::string> other_servers) {
       for (auto it = other_servers.begin(); it != other_servers.end(); it++) {
@@ -349,7 +361,6 @@ class RaftInterfaceClient {
       // Start with one yes vote (we are voting for ourself)
       std::atomic<uint8_t> yes_votes(1);
       std::atomic<uint8_t> no_votes(0);
-      std::vector<std::thread> threads;
       uint64_t majority = (num_servers / 2) + 1;
       uint64_t term;
 
@@ -384,6 +395,21 @@ class RaftInterfaceClient {
     }
 
     int Heartbeat() {
+      std::vector<std::thread> threads;
+      uint64_t term;
+
+      term = curTerm;
+
+      // Spawn threads to do the heartbeat
+      for (int i = 0; i < stubs.size(); i++) {
+        threads.push_back(std::thread(RaftInterfaceClient::EmptyAppendEntries,
+          std::ref(stubs[i]), term));
+      }
+
+      for (auto it = threads.begin(); it != threads.end(); it++) {
+        (*it).join();
+      }
+
       return 0;
     }
 };
@@ -600,6 +626,7 @@ void handle_heartbeats(std::vector<std::string> other_servers) {
   while (true) {
     if (state == STATE_LEADER) {
       // TODO: Handle sending heartbeats
+      servers.Heartbeat();
     } else {
       // If we haven't heard from the leader since the timeout time,
       // let's try to become the leader

@@ -25,6 +25,7 @@
 #include <atomic>
 #include <chrono>
 #include <thread>
+#include <fstream>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -57,6 +58,9 @@ using namespace cs739;
 
 std::shared_mutex lockArray [MAX_NUM_BLOCKS];
 std::mutex queue_lock; //lock to ensure atomicity in queue operations
+//lock to ensure we don't have data races with updating the term
+//and who we voted for
+std::mutex vote_lock;
 const std::string FILE_PATH = "blockstore.log";
 
 enum server_state {
@@ -72,6 +76,8 @@ std::atomic<bool> is_primary(false);
 std::atomic<uint64_t> last_comm_time(0);
 std::atomic<uint64_t> curTerm(0);
 std::atomic<int64_t> voted_for(HAVENT_VOTED);
+uint64_t server_id;
+uint64_t num_servers;
 enum server_state state;
 
 bool is_block_aligned(uint64_t addr) {
@@ -297,25 +303,94 @@ err:
 
 // Class is used to send RPCs to other clients
 class RaftInterfaceClient {
-  public:
-    RaftInterfaceClient(std::shared_ptr<Channel> channel)
-      : stub_(RaftInterface::NewStub(channel)) {}
+  private:
+    std::vector<std::unique_ptr<RaftInterface::Stub>> stubs;
 
-    int RequestVote() {
-      return 0;
+    static void RequestVote(std::unique_ptr<RaftInterface::Stub> &stub,
+        std::atomic<uint8_t> &yes_votes, std::atomic<uint8_t> &no_votes,
+        uint64_t term)
+    {
+      ClientContext context;
+      RequestVoteRequest request;
+      RequestVoteResponse response;
+
+      // Fill in the data
+      request.set_term(term);
+      request.set_candidate_id(server_id);
+      // TODO: Replace these placeholders with real values
+      request.set_last_log_index(0);
+      request.set_last_log_term(0);
+
+      Status status = stub->RequestVote(&context, request, &response);
+
+      if (status.ok()) {
+        if (response.vote_granted()) {
+          std::cout << "Yes vote\n";
+          yes_votes.fetch_add(1);
+        } else {
+          std::cout << "No vote\n";
+          no_votes.fetch_add(1);
+        }
+      } else {
+        std::cout << "Comm error\n";
+        // For now, assume network failure stuff is a no vote
+        no_votes.fetch_add(1);
+      }
+    }
+
+  public:
+    RaftInterfaceClient(std::vector<std::string> other_servers) {
+      for (auto it = other_servers.begin(); it != other_servers.end(); it++) {
+        stubs.push_back(RaftInterface::NewStub(grpc::CreateChannel(*it, grpc::InsecureChannelCredentials())));
+      }
+    }
+
+    int StartElection() {
+      // Start with one yes vote (we are voting for ourself)
+      std::atomic<uint8_t> yes_votes(1);
+      std::atomic<uint8_t> no_votes(0);
+      std::vector<std::thread> threads;
+      uint64_t majority = (num_servers / 2) + 1;
+      uint64_t term;
+
+      // Increment the term
+      vote_lock.lock();
+      term = curTerm.fetch_add(1) + 1;
+      voted_for = server_id;
+      vote_lock.unlock();
+
+      // Spawn threads to request the votes from our peers
+      for (int i = 0; i < stubs.size(); i++) {
+        std::thread t(RaftInterfaceClient::RequestVote,
+          std::ref(stubs[i]), std::ref(yes_votes), std::ref(no_votes), term);
+        t.detach();
+      }
+
+      // Wait until we have a majority of votes in some direction
+      while (yes_votes < majority && no_votes < majority) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      }
+
+      std::cout << "Hello\n";
+
+      if (yes_votes >= majority) {
+        state = STATE_LEADER;
+        return 1;
+      } else {
+        state = STATE_FOLLOWER;
+        last_comm_time = cur_time();
+        return 0;
+      }
     }
 
     int Heartbeat() {
       return 0;
     }
-
-  private:
-    std::unique_ptr<RaftInterface::Stub> stub_;
 };
 
 // Logic and data behind the server's behavior.
 class RBSImpl final : public RBS::Service {
-  std::vector<RaftInterfaceClient> servers;
+  RaftInterfaceClient servers;
 
   Status Read(ServerContext* context, const ReadRequest* request,
                   Response* reply) override {
@@ -409,11 +484,7 @@ unlock:
   }
 public:
   RBSImpl(std::vector<std::string> other_servers)
-  {
-    for (auto it = other_servers.begin(); it != other_servers.end(); it++) {
-      servers.push_back(grpc::CreateChannel(*it, grpc::InsecureChannelCredentials()));
-    }
-  }
+    : servers(other_servers) {}
 
 };
 
@@ -421,9 +492,10 @@ public:
 class RaftInterfaceImpl final : public RaftInterface::Service {
   Status RequestVote(ServerContext *context, const RequestVoteRequest *request,
                 RequestVoteResponse *reply) override {
-    static std::mutex vote_lock;
     uint64_t requestTerm = request->term();
     uint64_t candidateId = request->candidate_id();
+
+    std::cout << "Received RequestVote from " << candidateId << " for term " << requestTerm << std::endl;
 
     // Use a lock to make sure we don't respond to two simultaneous vote requests
     vote_lock.lock();
@@ -434,6 +506,8 @@ class RaftInterfaceImpl final : public RaftInterface::Service {
       voted_for = candidateId;
       reply->set_term(requestTerm);
       reply->set_vote_granted(true);
+
+      last_comm_time = cur_time();
     } else if (state == STATE_LEADER) {
       // From the last if case, we know that requestTerm <= curTerm
       // and we're the leader, so let the requester know we're the leader
@@ -451,6 +525,8 @@ class RaftInterfaceImpl final : public RaftInterface::Service {
         voted_for = candidateId;
         reply->set_term(requestTerm);
         reply->set_vote_granted(true);
+
+        last_comm_time = cur_time();
       }
     }
 
@@ -463,27 +539,30 @@ class RaftInterfaceImpl final : public RaftInterface::Service {
 
       uint64_t requestTerm = request->term();
 
-      if(state == STATE_LEADER) {
-        if(requestTerm > curTerm) {
-          state = STATE_FOLLOWER;
-          // reply->set_success(true);
-        }
+      last_comm_time = cur_time();
+
+      if (requestTerm > curTerm) {
+        vote_lock.lock();
+        curTerm = requestTerm;
+        voted_for = HAVENT_VOTED;
+        vote_lock.unlock();
+
         reply->set_success(false);
-
+        reply->set_term(curTerm);
+      } else if(state == STATE_LEADER) {
+        reply->set_term(curTerm);
+        reply->set_success(false);
       } else {
-
         // check on valid term
         if(requestTerm < curTerm) {
           reply->set_term(curTerm);
           reply->set_success(false);
+        } else {
+          state = STATE_FOLLOWER;
+
+          reply->set_term(curTerm);
+          reply->set_success(true);
         }
-
-        state = STATE_FOLLOWER;
-        curTerm = requestTerm;
-
-        reply->set_term(curTerm);
-        reply->set_success(true);
-
       }
 
     return Status::OK;
@@ -514,28 +593,71 @@ void RunServer(std::string listen_port, std::vector<std::string> other_servers) 
 }
 
 void handle_heartbeats(std::vector<std::string> other_servers) {
-  /*
-   * TODO: Send out heartbeats if necessary
-   */
+  RaftInterfaceClient servers(other_servers);
+  const int ELECTION_TIMEOUT = 5000;
+  int ret;
+
+  while (true) {
+    if (state == STATE_LEADER) {
+      // TODO: Handle sending heartbeats
+    } else {
+      // If we haven't heard from the leader since the timeout time,
+      // let's try to become the leader
+      uint64_t last_time = last_comm_time.load();
+      uint64_t cur = cur_time();
+
+      if (cur_time() > last_time && cur_time() - last_comm_time.load() >= ELECTION_TIMEOUT) {
+        std::cout << "Trying to become the leader!\n";
+        state = STATE_CANDIDATE;
+
+        ret = servers.StartElection();
+
+        if (ret) {
+          std::cout << "Became the leader for term " << curTerm << "! Democracy works!\n";
+        } else {
+          std::cout << "Did not become the leader\n";
+          last_comm_time = cur_time();
+        }
+      }
+    }
+  }
+}
+
+void process_server_file(std::vector<std::string> &list, std::string filename) {
+  std::ifstream file(filename);
+  std::string line;
+
+  num_servers = 1;
+  if (file.is_open()) {
+    while(std::getline(file, line)) {
+      num_servers++;
+      list.push_back(line);
+    }
+
+    file.close();
+  }
 }
 
 int main(int argc, char** argv) {
   if (argc < 3) {
-    std::cout << "Usage: ./server <listen_port> <server_ip:port> [is_primary]\n";;
+    std::cout << "Usage: ./server <id> <listen_port> <servers_file> [is_primary]\n";;
     return -1;
   }
-  std::string listen_port = argv[1];
-  std::string other_server = argv[2];
+  server_id = std::stoi(argv[1]);
+  std::string listen_port = argv[2];
+  std::string servers_file = argv[3];
   std::vector<std::string> other_servers;
-  other_servers.push_back(other_server);
 
-  if (argc >= 4)
-    is_primary = true;
+  if (argc >= 5) {
+    std::cout << "Running as leader!\n";
+    state = STATE_LEADER;
+  }
+  else {
+    std::cout << "Running as follower!\n";
+    state = STATE_FOLLOWER;
+  }
 
-  if (is_primary)
-    std::cout << "Running as primary!\n";
-  else
-    std::cout << "Running as backup!\n";
+  process_server_file(other_servers, servers_file);
 
   DIR *dir;
   struct dirent *entry;

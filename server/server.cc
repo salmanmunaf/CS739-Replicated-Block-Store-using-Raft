@@ -56,8 +56,14 @@ using namespace cs739;
 #define BLOCK_SIZE (4*KB)
 #define HAVENT_VOTED (-1)
 
+struct LogEntry {
+    uint64_t term;
+    uint64_t address;
+    char data[BLOCK_SIZE];
+};
+
 std::shared_mutex lockArray [MAX_NUM_BLOCKS];
-std::mutex queue_lock; //lock to ensure atomicity in queue operations
+std::mutex log_lock; //lock to ensure atomicity in queue operations
 //lock to ensure we don't have data races with updating the term
 //and who we voted for
 std::mutex vote_lock;
@@ -69,13 +75,13 @@ enum server_state {
     STATE_CANDIDATE
 };
 
-uint64_t time_since_last_response = 0;
-std::queue<std::string> data_log; //queue to log data to send to backup
-std::queue<uint64_t> address_log; //queue to log address to send to backup
-std::atomic<bool> is_primary(false);
+std::vector<struct LogEntry> raft_log;
 std::atomic<uint64_t> last_comm_time(0);
 std::atomic<uint64_t> curTerm(0);
 std::atomic<int64_t> voted_for(HAVENT_VOTED);
+std::atomic<uint64_t> commit_index(0);
+std::atomic<uint64_t> last_applied(0);
+uint64_t current_leader_id = 0;
 uint64_t server_id;
 uint64_t num_servers;
 enum server_state state;
@@ -276,7 +282,7 @@ Status do_atomic_write(const WriteRequest* request, Response *reply, std::string
   // To test the the undo logging stuff, if we see the data to write has the 
   // hash of the signal value (which is "hello_world" followed by a blocks worth of 0)
   // write some "corrupted" data and "crash" the server
-  if (write_hash == 13494594211096014138ull && is_primary.load()) {
+  if (write_hash == 13494594211096014138ull && state == STATE_LEADER) {
     char corruption[BLOCK_SIZE] = "corrupted_data_is_here";
     int len = strlen(corruption);
     memset(&corruption[BLOCK_SIZE], ' ', BLOCK_SIZE - len);
@@ -427,8 +433,9 @@ class RBSImpl final : public RBS::Service {
     int ret;
 
     // Return without doing anything if we are not the primary
-    if (!is_primary.load()) {
+    if (state != STATE_LEADER) {
       reply->set_return_code(BLOCKSTORE_NOT_PRIM);
+      reply->set_current_leader(current_leader_id);
       return Status::OK;
     }
 
@@ -470,43 +477,45 @@ err:
                   Response* reply) override {
     Status status;
     int ret;
+    int entry_index;
     uint64_t address = request->address();
-    uint64_t block = address / BLOCK_SIZE;
-    std::string undo_path = FILE_PATH + "." + std::to_string(address) + ".undo";
+    struct LogEntry log_entry;
     std::cout << "Data to write: " << request->data().c_str() << std::endl;
 
     // Make sure we are the primary
-    if (!is_primary.load()) {
+    if (state != STATE_LEADER) {
       reply->set_return_code(BLOCKSTORE_NOT_PRIM);
+      reply->set_current_leader(current_leader_id);
       return Status::OK;
     }
 
-    lockArray[block].lock();
-    if (!is_block_aligned(address)) {
-      lockArray[block + 1].lock();
+    log_entry.term = curTerm;
+    log_entry.address = address;
+    memcpy(log_entry.data, request->data().c_str(), request->data().length());
+
+    // Add the new entry to the log
+    log_lock.lock();
+    
+    raft_log.push_back(log_entry);
+    entry_index = raft_log.size() - 1;
+
+    log_lock.unlock();
+
+    // Wait for the update to be commited before returning to the client
+    while (commit_index < entry_index) {
+        // Have we somehow been demoted from leader?
+        // If so, forward the client to the new leader
+        if (state != STATE_LEADER) {
+            reply->set_return_code(BLOCKSTORE_NOT_PRIM);
+            reply->set_current_leader(current_leader_id);
+            return Status::OK;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
-    status = do_atomic_write(request, reply, undo_path);
-    if (!status.ok()) {
-      goto unlock;
-    }
-
-    // If we think the backup is up, we better forward the data to it
-    /*
-     * TODO: Write replication strategy
-     */
-
-    // The data should be persisted locally and is either persisted on the primary
-    // or we have added it to the queue to do so, so we can delete the undo file
-    unlink(undo_path.c_str());
-
-unlock:
-    if (!is_block_aligned(address)) {
-      lockArray[block + 1].unlock();
-    }
-    lockArray[block].unlock();
-
-    return status;
+    reply->set_return_code(BLOCKSTORE_SUCCESS);
+    return Status::OK;
   }
 public:
   RBSImpl(std::vector<std::string> other_servers)

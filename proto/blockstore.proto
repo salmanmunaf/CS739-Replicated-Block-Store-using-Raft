@@ -52,8 +52,9 @@ message WriteRequest {
 message Response {
   int32 return_code = 1;
   int32 error_code = 2;
-  int32 primary = 3;
-  bytes data = 4;
+  uint64 current_leader = 3;
+  int32 primary = 4;
+  bytes data = 5;
 }
 
 message EmptyPacket {}

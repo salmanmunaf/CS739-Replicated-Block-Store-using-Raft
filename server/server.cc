@@ -579,7 +579,7 @@ class RaftInterfaceImpl final : public RaftInterface::Service {
 
       last_comm_time = cur_time();
 
-      if (requestTerm > curTerm) {
+      if (requestTerm > curTerm) { //FIXME: confirm if these if/else statements are correct
         vote_lock.lock();
         curTerm = requestTerm;
         voted_for = HAVENT_VOTED;
@@ -614,15 +614,18 @@ class RaftInterfaceImpl final : public RaftInterface::Service {
       }
 
       struct LogEntry newEntry;
-      newEntry.term = request->term();
+      newEntry.term = request->term(); //FIXME: Is this the correct way??
       newEntry.address = request->address();
       memcpy(newEntry.data, request->data().c_str(), request->data().length());
       log_lock.lock();
       raft_log.push_back(newEntry);
-      entry_index = raft_log.size() - 1; //assuming entry index as commit index, but commit index should be set after call to Write
+      entry_index = raft_log.size() - 1; //FIXME: assuming entry index as commit idx, but commit idx should be set after call to Write
       log_lock.unlock();
 
-
+      uint64_t leaderCommitIdx = request->leader_commit();
+      if (leaderCommitIdx > entry_index) {
+    	  uint64_t newCommitIdx = min(leaderCommitIdx, raft_log.size()-1);
+      }
 
     return Status::OK;
   }

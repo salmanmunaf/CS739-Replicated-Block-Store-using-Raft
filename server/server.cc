@@ -573,6 +573,9 @@ class RaftInterfaceImpl final : public RaftInterface::Service {
                 AppendEntriesResponse *reply) override {
 
       uint64_t requestTerm = request->term();
+      uint64_t leaderId = request->leader_id();
+      uint64_t prevLogIndex = request->prev_log_index();
+      uint64_t prevLogTerm = request->prev_log_term();
 
       last_comm_time = cur_time();
 
@@ -580,8 +583,9 @@ class RaftInterfaceImpl final : public RaftInterface::Service {
         vote_lock.lock();
         curTerm = requestTerm;
         voted_for = HAVENT_VOTED;
+        state = STATE_FOLLOWER;
+        current_leader_id = leaderId;
         vote_lock.unlock();
-
         reply->set_success(false);
         reply->set_term(curTerm);
       } else if(state == STATE_LEADER) {
@@ -599,6 +603,26 @@ class RaftInterfaceImpl final : public RaftInterface::Service {
           reply->set_success(true);
         }
       }
+
+      if (raft_log[prevLogIndex].term != prevLogTerm) {
+    	  reply->set_success(false);
+    	  return Status::OK;
+      }
+
+      if (raft_log[prevLogIndex+1].term != requestTerm) {
+    	  raft_log.erase(raft_log.begin()+prevLogIndex+1, raft_log.end());
+      }
+
+      struct LogEntry newEntry;
+      newEntry.term = request->term();
+      newEntry.address = request->address();
+      memcpy(newEntry.data, request->data().c_str(), request->data().length());
+      log_lock.lock();
+      raft_log.push_back(newEntry);
+      entry_index = raft_log.size() - 1; //assuming entry index as commit index, but commit index should be set after call to Write
+      log_lock.unlock();
+
+
 
     return Status::OK;
   }

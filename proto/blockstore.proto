@@ -31,13 +31,19 @@ message AppendEntriesRequest {
   uint64 leader_id = 2;
   uint64 prev_log_index = 3;
   uint64 prev_log_term = 4;
-  repeated WriteRequest entries = 5;
+  repeated Entry entries = 5;
   uint64 leader_commit = 6;
 }
 
 message AppendEntriesResponse {
   uint64 term = 1;
   bool success = 2;
+}
+
+message Entry {
+    uint64 term = 1;
+    uint64 address = 2;
+    bytes data = 3;
 }
 
 message ReadRequest {

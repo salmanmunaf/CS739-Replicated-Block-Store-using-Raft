@@ -191,9 +191,6 @@ int main(int argc, char** argv) {
   RBSClient rbsClient5(
       grpc::CreateChannel(server5, grpc::InsecureChannelCredentials()));
 
-  map<int, int> tempMap;
-  tempMap[1]=1;
-
   map<int, RBSClient> serverMap;
   serverMap[1] = &rbsClient1;
   serverMap[2] = rbsClient2;

@@ -25,6 +25,7 @@
 #include <unordered_map>
 #include <chrono>
 #include <thread>
+#include <map>
 // standard c
 #include <unistd.h>
 #include <stdlib.h> // malloc
@@ -49,11 +50,13 @@ using grpc::ClientReader;
 using grpc::Status;
 using grpc::StatusCode;
 using namespace cs739;
+using namespace std;
 
 #define KB (1024)
 #define BLOCK_SIZE (4*KB)
 #define TIMEOUT (7000)
 
+int primary;
 class RBSClient {
   public:
     RBSClient(std::shared_ptr<Channel> channel)
@@ -90,6 +93,7 @@ class RBSClient {
                 std::cout << std::hash<std::string>{}(response.data()) << std::endl;
                 return response.return_code();
             } else if (response.return_code() == BLOCKSTORE_NOT_PRIM) {
+                primary = response.primary();
                 return response.return_code();
             }
             return response.error_code();
@@ -111,7 +115,10 @@ class RBSClient {
 
         if(status.ok()) {
             int return_code = response.return_code();
-            if(return_code == BLOCKSTORE_SUCCESS || return_code == BLOCKSTORE_NOT_PRIM) {
+            if(return_code == BLOCKSTORE_SUCCESS) {
+                return response.return_code();
+            } else if (return_code == BLOCKSTORE_NOT_PRIM) {
+                primary = response.primary();
                 return response.return_code();
             }
             return response.error_code();
@@ -124,7 +131,7 @@ class RBSClient {
     std::unique_ptr<RBS::Stub> stub_;
 };
 
-int do_read(RBSClient &rbsClient1, RBSClient &rbsClient2, int primary, off_t offset) {
+int do_read(map<int, RBSClient> serverMap, off_t offset) {
     bool first_try = true;
     int result = -1, retry = 1;
     uint64_t request_start_time = cur_time();
@@ -135,23 +142,17 @@ int do_read(RBSClient &rbsClient1, RBSClient &rbsClient2, int primary, off_t off
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
         }
         first_try = false;
-    
-        if (primary == 0) {
-            result = rbsClient1.Read(offset);
-        } else {
-            result = rbsClient2.Read(offset);
-        }
+
+        RBSClient &rbsClient = serverMap[primary];
+        result = rbsClient.Read(offset);
     
         std::cout << primary << ": " << result << std::endl;
-        if (result != BLOCKSTORE_SUCCESS) {
-            primary = 1 - primary;
-        }
     }
     
     return primary;
 }
 
-int do_write(RBSClient &rbsClient1, RBSClient &rbsClient2, int primary, off_t offset, std::string str) {
+int do_write(map<int, RBSClient> serverMap, off_t offset, std::string str) {
     bool first_try = true;
     int result = -1, retry = 1;
     uint64_t request_start_time = cur_time();
@@ -162,16 +163,10 @@ int do_write(RBSClient &rbsClient1, RBSClient &rbsClient2, int primary, off_t of
         }
         first_try = false;
 
-        if(primary == 0) {
-            result = rbsClient1.Write(offset, std::string(str)); 
-        } else {
-            result = rbsClient2.Write(offset, std::string(str));
-        }
+        RBSClient &rbsClient = serverMap[primary];
+        result = rbsClient.Write(offset, std::string(str));
 
         std::cout << primary << ": " << result << std::endl;
-        if (result != BLOCKSTORE_SUCCESS) {
-            primary = 1 - primary;
-        }
     }
 
     return primary;
@@ -181,22 +176,41 @@ int main(int argc, char** argv) {
 
   std::string server1 = argv[1];
   std::string server2 = argv[2];
+  std::string server3 = argv[3];
+  std::string server4 = argv[4];
+  std::string server5 = argv[5];
 
   RBSClient rbsClient1(
       grpc::CreateChannel(server1, grpc::InsecureChannelCredentials()));
   RBSClient rbsClient2(
       grpc::CreateChannel(server2, grpc::InsecureChannelCredentials()));
+  RBSClient rbsClient3(
+      grpc::CreateChannel(server3, grpc::InsecureChannelCredentials()));
+  RBSClient rbsClient4(
+      grpc::CreateChannel(server4, grpc::InsecureChannelCredentials()));
+  RBSClient rbsClient5(
+      grpc::CreateChannel(server5, grpc::InsecureChannelCredentials()));
+
+  map<int, int> tempMap;
+  tempMap[1]=1;
+
+  map<int, RBSClient> serverMap;
+  serverMap[1] = &rbsClient1;
+  serverMap[2] = rbsClient2;
+  serverMap[3] = rbsClient3;
+  serverMap[4] = rbsClient4;
+  serverMap[5] = rbsClient5;
 
   int user_input;
   off_t offset;
   std::string str;
   uint64_t request_start_time;
-  int primary=0;
+  primary=1;
 
   // one-of read
   if (argc == 4) {
     offset = std::stoull(std::string(argv[3]));
-    do_read(rbsClient1, rbsClient2, primary, offset);
+    do_read(serverMap, offset);
     return 0;
   }
   // one-of write
@@ -204,7 +218,7 @@ int main(int argc, char** argv) {
     offset = std::stoull(std::string(argv[3]));
     str = std::string(argv[4]);
     str.resize(4096, ' ');
-    do_write(rbsClient1, rbsClient2, primary, offset, str);
+    do_write(serverMap, offset, str);
     return 0;
   }
 
@@ -216,7 +230,7 @@ int main(int argc, char** argv) {
     std::cin >> offset;
 
     if(user_input == 1) {
-        primary = do_read(rbsClient1, rbsClient2, primary, offset);
+        primary = do_read(serverMap, offset);
     } else {
         
         std::cout << "Enter data to write: " << std::endl;
@@ -228,7 +242,7 @@ int main(int argc, char** argv) {
         str.resize(4096, ' ');
         std::cout << "Hash of data to write: " << std::hash<std::string>{}(str) << std::endl;
 
-        primary = do_write(rbsClient1, rbsClient2, primary, offset, str);
+        primary = do_write(serverMap, offset, str);
     }
 
     std::cout << "Enter operation: ";

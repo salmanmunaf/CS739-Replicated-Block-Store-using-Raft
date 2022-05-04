@@ -191,7 +191,11 @@ int main(int argc, char** argv) {
   RBSClient rbsClient5(
       grpc::CreateChannel(server5, grpc::InsecureChannelCredentials()));
 
-  RBSClient serverArr [5] = {rbsClient1, rbsClient2, rbsClient3, rbsClient4, rbsClient5};
+  RBSClient serverArr [5] = { RBSClient(grpc::CreateChannel(server1, grpc::InsecureChannelCredentials())),
+                            RBSClient(grpc::CreateChannel(server2, grpc::InsecureChannelCredentials())),
+                            RBSClient(grpc::CreateChannel(server3, grpc::InsecureChannelCredentials())),
+                            RBSClient(grpc::CreateChannel(server4, grpc::InsecureChannelCredentials())),
+                            RBSClient(grpc::CreateChannel(server5, grpc::InsecureChannelCredentials())) };
 
   int user_input;
   off_t offset;

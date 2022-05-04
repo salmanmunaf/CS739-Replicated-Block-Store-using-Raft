@@ -653,7 +653,7 @@ class RaftInterfaceImpl final : public RaftInterface::Service {
 
       struct LogEntry newEntry;
       //run a loop, keep on appending entries from WriteRequest
-      for (int i = 0; i < request->entries.size(); i++) { //confirm syntax???
+      for (int i = 0; i < request->entries().size(); i++) { //confirm syntax???
 		  newEntry.term = request->entries(i).term();
 		  newEntry.address = request->entries(i).address();
 		  memcpy(newEntry.data, request->entries(i).data().c_str(), request->entries(i).data().length());

@@ -131,7 +131,7 @@ class RBSClient {
     std::unique_ptr<RBS::Stub> stub_;
 };
 
-int do_read(map<int, RBSClient> serverMap, off_t offset) {
+int do_read(RBSClient* serverArr, off_t offset) {
     bool first_try = true;
     int result = -1, retry = 1;
     uint64_t request_start_time = cur_time();
@@ -143,7 +143,7 @@ int do_read(map<int, RBSClient> serverMap, off_t offset) {
         }
         first_try = false;
 
-        RBSClient &rbsClient = serverMap[primary];
+        RBSClient &rbsClient = serverArr[primary];
         result = rbsClient.Read(offset);
     
         std::cout << primary << ": " << result << std::endl;
@@ -152,7 +152,7 @@ int do_read(map<int, RBSClient> serverMap, off_t offset) {
     return primary;
 }
 
-int do_write(map<int, RBSClient> serverMap, off_t offset, std::string str) {
+int do_write(RBSClient* serverArr, off_t offset, std::string str) {
     bool first_try = true;
     int result = -1, retry = 1;
     uint64_t request_start_time = cur_time();
@@ -163,7 +163,7 @@ int do_write(map<int, RBSClient> serverMap, off_t offset, std::string str) {
         }
         first_try = false;
 
-        RBSClient &rbsClient = serverMap[primary];
+        RBSClient &rbsClient = serverArr[primary];
         result = rbsClient.Write(offset, std::string(str));
 
         std::cout << primary << ": " << result << std::endl;
@@ -191,12 +191,7 @@ int main(int argc, char** argv) {
   RBSClient rbsClient5(
       grpc::CreateChannel(server5, grpc::InsecureChannelCredentials()));
 
-  map<int, RBSClient> serverMap;
-  serverMap[1] = &rbsClient1;
-  serverMap[2] = rbsClient2;
-  serverMap[3] = rbsClient3;
-  serverMap[4] = rbsClient4;
-  serverMap[5] = rbsClient5;
+  RBSClient serverArr [5] = {rbsClient1, rbsClient2, rbsClient3. rbsClient4, rbsClient5};
 
   int user_input;
   off_t offset;
@@ -207,7 +202,7 @@ int main(int argc, char** argv) {
   // one-of read
   if (argc == 4) {
     offset = std::stoull(std::string(argv[3]));
-    do_read(serverMap, offset);
+    do_read(serverArr, offset);
     return 0;
   }
   // one-of write
@@ -215,7 +210,7 @@ int main(int argc, char** argv) {
     offset = std::stoull(std::string(argv[3]));
     str = std::string(argv[4]);
     str.resize(4096, ' ');
-    do_write(serverMap, offset, str);
+    do_write(serverArr, offset, str);
     return 0;
   }
 
@@ -227,7 +222,7 @@ int main(int argc, char** argv) {
     std::cin >> offset;
 
     if(user_input == 1) {
-        primary = do_read(serverMap, offset);
+        primary = do_read(serverArr, offset);
     } else {
         
         std::cout << "Enter data to write: " << std::endl;
@@ -239,7 +234,7 @@ int main(int argc, char** argv) {
         str.resize(4096, ' ');
         std::cout << "Hash of data to write: " << std::hash<std::string>{}(str) << std::endl;
 
-        primary = do_write(serverMap, offset, str);
+        primary = do_write(serverArr, offset, str);
     }
 
     std::cout << "Enter operation: ";

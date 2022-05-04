@@ -709,6 +709,43 @@ void RunServer(std::string listen_port, std::vector<std::string> other_servers) 
   server->Wait();
 }
 
+void commit_thread() {
+    uint64_t last_log_index = 0;
+    uint64_t majority = (num_servers / 2) + 1;
+    uint64_t votes;
+
+    while (true) {
+        if (state != STATE_LEADER)
+            goto sleep;
+
+        last_log_index = raft_log.size() - 1;
+        for (int i = last_log_index; i > commit_index; i--) {
+            // Start with 1 vote counting ourselves
+            votes = 1;
+            for (int j = 0; j < matchIndex.size(); j++) {
+                if (matchIndex[j] >= i)
+                    votes++;
+            }
+
+            if (votes >= majority) {
+                // We can only commit if the log has an entry of out term
+                uint64_t term;
+
+                log_lock.lock();
+                term = raft_log[i].term;
+                log_lock.unlock();
+
+                if (term == curTerm) {
+                    // TODO: commit up to the index
+                    commit_index = i;
+                }
+            }
+        }
+sleep:
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+}
+
 void handle_heartbeats(std::vector<std::string> other_servers) {
   RaftInterfaceClient servers(other_servers);
   const int ELECTION_TIMEOUT = 5000;
@@ -800,6 +837,7 @@ int main(int argc, char** argv) {
   last_comm_time = cur_time() + 10000;
 
   std::thread server_thread(RunServer, listen_port, other_servers);
+  std::thread ldr_commit_thread(commit_thread);
 
   handle_heartbeats(other_servers);
 

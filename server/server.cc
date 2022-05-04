@@ -579,53 +579,59 @@ class RaftInterfaceImpl final : public RaftInterface::Service {
 
       last_comm_time = cur_time();
 
-      if (requestTerm > curTerm) { //FIXME: confirm if these if/else statements are correct
+      if (requestTerm > curTerm) {
         vote_lock.lock();
         curTerm = requestTerm;
         voted_for = HAVENT_VOTED;
         state = STATE_FOLLOWER;
         current_leader_id = leaderId;
         vote_lock.unlock();
-        reply->set_success(false);
-        reply->set_term(curTerm);
-      } else if(state == STATE_LEADER) {
-        reply->set_term(curTerm);
-        reply->set_success(false);
-      } else {
-        // check on valid term
-        if(requestTerm < curTerm) {
-          reply->set_term(curTerm);
-          reply->set_success(false);
-        } else {
-          state = STATE_FOLLOWER;
-
-          reply->set_term(curTerm);
-          reply->set_success(true);
-        }
+        //reply->set_success(false);
+        //reply->set_term(curTerm);
       }
+	// check on valid term
+	  if(requestTerm < curTerm) {
+	    reply->set_term(curTerm);
+	    reply->set_success(false);
+	    return Status::OK;
+	  } else {
+	    state = STATE_FOLLOWER;
+	    reply->set_term(curTerm);
+	    reply->set_success(true);
+	  }
 
+		//FIXME: Do we have to do anything else here??
+	  if (prevLogIndex > raft_log.size()) {
+		  return Status::OK;
+	  }
       if (raft_log[prevLogIndex].term != prevLogTerm) {
     	  reply->set_success(false);
     	  return Status::OK;
       }
 
-      if (raft_log[prevLogIndex+1].term != requestTerm) {
+      uint64_t entryTerm = request->WriteRequest(0).term();
+      if (raft_log[prevLogIndex+1].term != entryTerm) {
     	  raft_log.erase(raft_log.begin()+prevLogIndex+1, raft_log.end());
       }
 
       struct LogEntry newEntry;
-      newEntry.term = request->term(); //FIXME: Is this the correct way??
-      newEntry.address = request->address();
-      memcpy(newEntry.data, request->data().c_str(), request->data().length());
-      log_lock.lock();
-      raft_log.push_back(newEntry);
-      entry_index = raft_log.size() - 1; //FIXME: assuming entry index as commit idx, but commit idx should be set after call to Write
-      log_lock.unlock();
+      //run a loop, keep on appending entries from WriteRequest
+      for (int i = 0; i < request->WriteRequest_size(); i++) { //confirm syntax???
+		  newEntry.term = request->WriteRequest(i).term();
+		  newEntry.address = request->WriteRequest(i).address();
+		  memcpy(newEntry.data, request->WriteRequest(i).data().c_str(), request->WriteRequest(i).data().length());
+		  log_lock.lock();
+		  raft_log.push_back(newEntry);
+		  commit_index = raft_log.size() - 1;
+		  log_lock.unlock();
+      }
 
       uint64_t leaderCommitIdx = request->leader_commit();
-      if (leaderCommitIdx > entry_index) {
+      if (leaderCommitIdx > commit_index) { //comparison should be with commit index
     	  uint64_t newCommitIdx = min(leaderCommitIdx, raft_log.size()-1);
+    	  //TODO: Write function called here
       }
+
 
     return Status::OK;
   }

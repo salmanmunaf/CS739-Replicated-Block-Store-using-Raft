@@ -670,13 +670,13 @@ class RaftInterfaceImpl final : public RaftInterface::Service {
 		  memcpy(newEntry.data, request->entries(i).data().c_str(), request->entries(i).data().length());
 		  log_lock.lock();
 		  raft_log.push_back(newEntry);
-		  commit_index = raft_log.size() - 1;
+		  //commit_index = raft_log.size() - 1;
 		  log_lock.unlock();
       }
 
       uint64_t leaderCommitIdx = request->leader_commit();
       if (leaderCommitIdx > commit_index) { //comparison should be with commit index
-    	  uint64_t newCommitIdx = std::min(leaderCommitIdx, raft_log.size()-1);
+    	  commit_index = std::min(leaderCommitIdx, raft_log.size()-1);
     	  //TODO: Write function called here
       }
 

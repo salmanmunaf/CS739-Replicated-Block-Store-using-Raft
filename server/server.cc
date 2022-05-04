@@ -365,6 +365,7 @@ class RaftInterfaceClient {
       ClientContext context;
       AppendEntriesRequest request;
       AppendEntriesResponse response;
+      Entry entry;
 
       request.set_term(curTerm);
       request.set_leader_id(server_id);
@@ -375,7 +376,10 @@ class RaftInterfaceClient {
         //std::vector<struct LogEntry> entries = [];
         if (raft_log.size() - 1 > nextIndex[clientIdx]) {
           for (int i = nextIndex[clientIdx]; i < raft_log.size(); i++) {
-            request.add_entries(raft_log[i]);
+            entry.set_term(raft_log[i].term);
+            entry.set_address(raft_log[i].address);
+            entry.set_data(raft_log[i].data);
+            request.add_entries(entry);
           }
         }
         //request.set_entries(entries);

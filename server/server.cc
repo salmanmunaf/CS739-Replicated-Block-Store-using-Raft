@@ -640,26 +640,22 @@ class RaftInterfaceImpl final : public RaftInterface::Service {
 	    reply->set_success(true);
 	  }
 
-		//FIXME: Do we have to do anything else here??
-	  if (prevLogIndex > raft_log.size()) {
-		  return Status::OK;
-	  }
-      if (raft_log[prevLogIndex].term != prevLogTerm) {
+      if (raft_log[prevLogIndex].term != prevLogTerm || prevLogIndex > raft_log.size()) {
     	  reply->set_success(false);
     	  return Status::OK;
       }
 
-      uint64_t entryTerm = request->WriteRequest(0).term();
+      uint64_t entryTerm = request->Entry(0).term();
       if (raft_log[prevLogIndex+1].term != entryTerm) {
     	  raft_log.erase(raft_log.begin()+prevLogIndex+1, raft_log.end());
       }
 
       struct LogEntry newEntry;
       //run a loop, keep on appending entries from WriteRequest
-      for (int i = 0; i < request->WriteRequest_size(); i++) { //confirm syntax???
-		  newEntry.term = request->WriteRequest(i).term();
-		  newEntry.address = request->WriteRequest(i).address();
-		  memcpy(newEntry.data, request->WriteRequest(i).data().c_str(), request->WriteRequest(i).data().length());
+      for (int i = 0; i < request->Entry_size(); i++) { //confirm syntax???
+		  newEntry.term = request->Entry(i).term();
+		  newEntry.address = request->Entry(i).address();
+		  memcpy(newEntry.data, request->Entry(i).data().c_str(), request->Entry(i).data().length());
 		  log_lock.lock();
 		  raft_log.push_back(newEntry);
 		  commit_index = raft_log.size() - 1;

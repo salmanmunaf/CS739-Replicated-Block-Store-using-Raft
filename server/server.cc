@@ -360,7 +360,7 @@ class RaftInterfaceClient {
       stub->AppendEntries(&context, request, &response);
     }
 
-    static void AppendEntries(std::unique_ptr<RaftInterface::Stub> &stub, uint64_t clientIdx, uint64_t term)
+    static void AppendEntries(std::unique_ptr<RaftInterface::Stub> &stub, uint64_t serverIdx, uint64_t term)
     {
       ClientContext context;
       AppendEntriesRequest request;
@@ -377,10 +377,10 @@ class RaftInterfaceClient {
         // This represents the last index we are sending to the follower
         update_index = raft_log.size() - 1;
 
-        request.set_prev_log_term(raft_log[nextIndex[clientIdx] - 1].term);
-        request.set_prev_log_index(nextIndex[clientIdx] - 1);
-        if (raft_log.size() - 1 > nextIndex[clientIdx]) {
-          for (int i = nextIndex[clientIdx]; i < raft_log.size(); i++) {
+        request.set_prev_log_term(raft_log[nextIndex[serverIdx] - 1].term);
+        request.set_prev_log_index(nextIndex[serverIdx] - 1);
+        if (raft_log.size() - 1 > nextIndex[serverIdx]) {
+          for (int i = nextIndex[serverIdx]; i < raft_log.size(); i++) {
             entry = request.add_entries();
             entry->set_term(raft_log[i].term);
             entry->set_address(raft_log[i].address);
@@ -460,8 +460,8 @@ class RaftInterfaceClient {
 
       // Spawn threads to do the heartbeat
       for (int i = 0; i < stubs.size(); i++) {
-        threads.push_back(std::thread(RaftInterfaceClient::EmptyAppendEntries,
-          std::ref(stubs[i]), term));
+        threads.push_back(std::thread(RaftInterfaceClient::AppendEntries,
+          std::ref(stubs[i]), i, term));
       }
 
       for (auto it = threads.begin(); it != threads.end(); it++) {

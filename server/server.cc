@@ -392,12 +392,12 @@ class RaftInterfaceClient {
         stub->AppendEntries(&context, request, &response);
         success = response.success();
         if (!success) {
-          nextIndex[clientIdx]--;
+          nextIndex[serverIdx]--;
         }
       }
 
-      nextIndex[clientIdx] = update_index + 1;
-      matchIndex[clientIdx] = update_index;
+      nextIndex[serverIdx] = update_index + 1;
+      matchIndex[serverIdx] = update_index;
     }
 
   public:

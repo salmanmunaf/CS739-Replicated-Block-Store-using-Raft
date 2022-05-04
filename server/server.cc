@@ -82,8 +82,8 @@ std::vector<uint64_t> matchIndex;
 std::atomic<uint64_t> last_comm_time(0);
 std::atomic<uint64_t> curTerm(0);
 std::atomic<int64_t> voted_for(HAVENT_VOTED);
-std::atomic<uint64_t> commit_index(0);
-std::atomic<uint64_t> last_applied(0);
+std::atomic<uint64_t> commit_index(-1);
+std::atomic<uint64_t> last_applied(-1);
 uint64_t current_leader_id = 0;
 uint64_t server_id;
 uint64_t num_servers;
@@ -270,10 +270,10 @@ err:
   return -1;
 }
 
-Status do_atomic_write(const WriteRequest* request, Response *reply, std::string undo_path) {
-  const char* write_buf = request->data().c_str();
-  uint64_t address = request->address();
-  uint64_t write_hash = std::hash<std::string>{}(request->data());
+int do_atomic_write(uint64_t address, std::string data) {
+  std::string undo_path = FILE_PATH + "." + std::to_string(address) + ".undo";
+  const char* write_buf = data.c_str();
+  uint64_t write_hash = std::hash<std::string>{}(data);
   int fd;
   int ret;
 
@@ -298,16 +298,25 @@ Status do_atomic_write(const WriteRequest* request, Response *reply, std::string
   if (ret < 0) {
     goto err;
   }
+  unlink(undo_path.c_str());
 
-  reply->set_return_code(BLOCKSTORE_SUCCESS);
-  reply->set_error_code(0);
-  return Status::OK;
+  return 0;
 err:
   printf("Write %lx failed\n", address);
-  reply->set_return_code(BLOCKSTORE_FAIL);
-  reply->set_error_code(-errno);
   perror(strerror(errno));
-  return Status::OK;
+  return -1;
+}
+
+void apply_entries(uint64_t first, uint64_t last) {
+  for (int i = first; i <= last; i++) {
+    LogEntry entry;
+
+    log_lock.lock();
+    entry = raft_log[i];
+    log_lock.unlock();
+
+    do_atomic_write(entry.address, std::string(entry.data, BLOCK_SIZE));
+  }
 }
 
 // Class is used to send RPCs to other clients
@@ -677,8 +686,12 @@ class RaftInterfaceImpl final : public RaftInterface::Service {
 
       uint64_t leaderCommitIdx = request->leader_commit();
       if (leaderCommitIdx > commit_index) { //comparison should be with commit index
-    	  commit_index = std::min(leaderCommitIdx, raft_log.size()-1);
-    	  //TODO: Write function called here
+        uint64_t new_commit_index = std::min(leaderCommitIdx, raft_log.size()-1);
+
+        // Apply the log entries
+        apply_entries(commit_index + 1, new_commit_index);
+
+        commit_index = new_commit_index;
       }
 
 
@@ -736,7 +749,7 @@ void commit_thread() {
                 log_lock.unlock();
 
                 if (term == curTerm) {
-                    // TODO: commit up to the index
+                    apply_entries(commit_index + 1, i);
                     commit_index = i;
                 }
             }

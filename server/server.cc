@@ -76,6 +76,8 @@ enum server_state {
 };
 
 std::vector<struct LogEntry> raft_log;
+std::vector<uint64_t> nextIndex;
+std::vector<uint64_t> matchIndex;
 std::atomic<uint64_t> last_comm_time(0);
 std::atomic<uint64_t> curTerm(0);
 std::atomic<int64_t> voted_for(HAVENT_VOTED);
@@ -346,6 +348,7 @@ class RaftInterfaceClient {
 
     static void EmptyAppendEntries(std::unique_ptr<RaftInterface::Stub> &stub, uint64_t term)
     {
+      Status status;
       ClientContext context;
       AppendEntriesRequest request;
       AppendEntriesResponse response;
@@ -356,10 +359,41 @@ class RaftInterfaceClient {
       stub->AppendEntries(&context, request, &response);
     }
 
+    static void AppendEntries(std::unique_ptr<RaftInterface::Stub> &stub, uint64_t clientIdx, uint64_t term)
+    {
+      ClientContext context;
+      AppendEntriesRequest request;
+      AppendEntriesResponse response;
+
+      request.set_term(curTerm);
+      request.set_leader_id(server_id);
+
+      while (!response.success()) {
+        request.set_prev_log_term(raft_log[raft_log.size() - 1].term);
+        request.set_prev_log_index(raft_log.size() - 1);
+        std::vector<struct LogEntry> entries = [];
+        if (raft_log.size() - 1 > nextIndex[clientIdx]) {
+          for (int i = nextIndex[clientIdx]; i < raft_log.size(); i++) {
+            entries.push_back(raft_log[i]);
+          }
+        }
+        request.set_entries(entries);
+        stub->AppendEntries(&context, request, &response);
+        if (!response.success()) {
+          nextIndex[clientIdx]--;
+        }
+      }
+
+      nextIndex[clientIdx] = raft_log.size();
+      matchIndex[clientIdx] = raft_log.size();
+    }
+
   public:
     RaftInterfaceClient(std::vector<std::string> other_servers) {
       for (auto it = other_servers.begin(); it != other_servers.end(); it++) {
         stubs.push_back(RaftInterface::NewStub(grpc::CreateChannel(*it, grpc::InsecureChannelCredentials())));
+        matchIndex.push_back(-1);
+        nextIndex.push_back(-1);
       }
     }
 
@@ -392,6 +426,10 @@ class RaftInterfaceClient {
 
       if (yes_votes >= majority) {
         state = STATE_LEADER;
+        for (int i = 0; i < stubs.size(); i++) {
+          nextIndex[i] = raft_log.size();
+          matchIndex[i] = 0;
+        }
         return 1;
       } else {
         state = STATE_FOLLOWER;
@@ -405,6 +443,8 @@ class RaftInterfaceClient {
       uint64_t term;
 
       term = curTerm;
+
+      std::cout << "Sending Append Entries" << std::endl;
 
       // Spawn threads to do the heartbeat
       for (int i = 0; i < stubs.size(); i++) {

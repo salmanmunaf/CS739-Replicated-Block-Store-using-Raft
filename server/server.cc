@@ -371,6 +371,7 @@ class RaftInterfaceClient {
 
       request.set_term(curTerm);
       request.set_leader_id(server_id);
+      request.set_leader_commit(commit_index);
 
       while (!success) {
         log_lock.lock();

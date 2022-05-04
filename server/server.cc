@@ -26,6 +26,7 @@
 #include <chrono>
 #include <thread>
 #include <fstream>
+#include <algorithm>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -371,13 +372,13 @@ class RaftInterfaceClient {
       while (!response.success()) {
         request.set_prev_log_term(raft_log[raft_log.size() - 1].term);
         request.set_prev_log_index(raft_log.size() - 1);
-        std::vector<struct LogEntry> entries = [];
+        //std::vector<struct LogEntry> entries = [];
         if (raft_log.size() - 1 > nextIndex[clientIdx]) {
           for (int i = nextIndex[clientIdx]; i < raft_log.size(); i++) {
-            entries.push_back(raft_log[i]);
+            request.add_entries(raft_log[i]);
           }
         }
-        request.set_entries(entries);
+        //request.set_entries(entries);
         stub->AppendEntries(&context, request, &response);
         if (!response.success()) {
           nextIndex[clientIdx]--;
@@ -645,17 +646,17 @@ class RaftInterfaceImpl final : public RaftInterface::Service {
     	  return Status::OK;
       }
 
-      uint64_t entryTerm = request->Entry(0).term();
+      uint64_t entryTerm = request->entries(0).term();
       if (raft_log[prevLogIndex+1].term != entryTerm) {
     	  raft_log.erase(raft_log.begin()+prevLogIndex+1, raft_log.end());
       }
 
       struct LogEntry newEntry;
       //run a loop, keep on appending entries from WriteRequest
-      for (int i = 0; i < request->Entry_size(); i++) { //confirm syntax???
-		  newEntry.term = request->Entry(i).term();
-		  newEntry.address = request->Entry(i).address();
-		  memcpy(newEntry.data, request->Entry(i).data().c_str(), request->Entry(i).data().length());
+      for (int i = 0; i < request->entries.size(); i++) { //confirm syntax???
+		  newEntry.term = request->entries(i).term();
+		  newEntry.address = request->entries(i).address();
+		  memcpy(newEntry.data, request->entries(i).data().c_str(), request->entries(i).data().length());
 		  log_lock.lock();
 		  raft_log.push_back(newEntry);
 		  commit_index = raft_log.size() - 1;
@@ -664,7 +665,7 @@ class RaftInterfaceImpl final : public RaftInterface::Service {
 
       uint64_t leaderCommitIdx = request->leader_commit();
       if (leaderCommitIdx > commit_index) { //comparison should be with commit index
-    	  uint64_t newCommitIdx = min(leaderCommitIdx, raft_log.size()-1);
+    	  uint64_t newCommitIdx = std::min(leaderCommitIdx, raft_log.size()-1);
     	  //TODO: Write function called here
       }
 

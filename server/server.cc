@@ -366,14 +366,19 @@ class RaftInterfaceClient {
       AppendEntriesRequest request;
       AppendEntriesResponse response;
       Entry* entry;
+      bool success = false;
+      uint64_t update_index = 0;
 
       request.set_term(curTerm);
       request.set_leader_id(server_id);
 
-      while (!response.success()) {
-        request.set_prev_log_term(raft_log[raft_log.size() - 1].term);
-        request.set_prev_log_index(raft_log.size() - 1);
-        //std::vector<struct LogEntry> entries = [];
+      while (!success) {
+        log_lock.lock();
+        // This represents the last index we are sending to the follower
+        update_index = raft_log.size() - 1;
+
+        request.set_prev_log_term(raft_log[nextIndex[clientIdx] - 1].term);
+        request.set_prev_log_index(nextIndex[clientIdx] - 1);
         if (raft_log.size() - 1 > nextIndex[clientIdx]) {
           for (int i = nextIndex[clientIdx]; i < raft_log.size(); i++) {
             entry = request.add_entries();
@@ -382,15 +387,17 @@ class RaftInterfaceClient {
             entry->set_data(raft_log[i].data);
           }
         }
-        //request.set_entries(entries);
+        log_lock.unlock();
+
         stub->AppendEntries(&context, request, &response);
-        if (!response.success()) {
+        success = response.success();
+        if (!success) {
           nextIndex[clientIdx]--;
         }
       }
 
-      nextIndex[clientIdx] = raft_log.size();
-      matchIndex[clientIdx] = raft_log.size();
+      nextIndex[clientIdx] = update_index + 1;
+      matchIndex[clientIdx] = update_index;
     }
 
   public:

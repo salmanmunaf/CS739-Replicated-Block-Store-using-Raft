@@ -390,8 +390,14 @@ class RaftInterfaceClient {
         // This represents the last index we are sending to the follower
         update_index = raft_log.size() - 1;
 
-        request.set_prev_log_term(raft_log[nextIndex[serverIdx] - 1].term);
-        request.set_prev_log_index(nextIndex[serverIdx] - 1);
+        if (nextIndex[serverIdx] - 1 < 0) {
+          request.set_prev_log_term(-1);
+          request.set_prev_log_index(-1);
+        } else {
+          request.set_prev_log_term(raft_log[nextIndex[serverIdx] - 1].term);
+          request.set_prev_log_index(nextIndex[serverIdx] - 1);
+        }
+
         if (raft_log.size() - 1 > nextIndex[serverIdx]) {
           for (int i = nextIndex[serverIdx]; i < raft_log.size(); i++) {
             entry = request.add_entries();
@@ -405,6 +411,7 @@ class RaftInterfaceClient {
         stub->AppendEntries(&context, request, &response);
         success = response.success();
         if (!success) {
+          std::cout << "Unsuccessful response received from server: " << serverIdx << " for term: " << term << std::endl;
           nextIndex[serverIdx]--;
         }
       }
@@ -675,26 +682,28 @@ class RaftInterfaceImpl final : public RaftInterface::Service {
 	    reply->set_success(true);
 	  }
 
-      if (raft_log[prevLogIndex].term != prevLogTerm || prevLogIndex > raft_log.size()) {
+      if (prevLogIndex >= 0 && (raft_log[prevLogIndex].term != prevLogTerm || prevLogIndex > raft_log.size())) {
     	  reply->set_success(false);
     	  return Status::OK;
       }
 
-      uint64_t entryTerm = request->entries(0).term();
-      if (raft_log[prevLogIndex+1].term != entryTerm) {
-    	  raft_log.erase(raft_log.begin()+prevLogIndex+1, raft_log.end());
+      if(request->entries().size() > 0) {
+        uint64_t entryTerm = request->entries(0).term();
+        if (raft_log[prevLogIndex+1].term != entryTerm) {
+          raft_log.erase(raft_log.begin()+prevLogIndex+1, raft_log.end());
+        }
       }
 
       struct LogEntry newEntry;
       //run a loop, keep on appending entries from WriteRequest
       for (int i = 0; i < request->entries().size(); i++) { //confirm syntax???
-		  newEntry.term = request->entries(i).term();
-		  newEntry.address = request->entries(i).address();
-		  memcpy(newEntry.data, request->entries(i).data().c_str(), request->entries(i).data().length());
-		  log_lock.lock();
-		  raft_log.push_back(newEntry);
-		  //commit_index = raft_log.size() - 1;
-		  log_lock.unlock();
+        newEntry.term = request->entries(i).term();
+        newEntry.address = request->entries(i).address();
+        memcpy(newEntry.data, request->entries(i).data().c_str(), request->entries(i).data().length());
+        log_lock.lock();
+        raft_log.push_back(newEntry);
+        //commit_index = raft_log.size() - 1;
+        log_lock.unlock();
       }
 
       uint64_t leaderCommitIdx = request->leader_commit();

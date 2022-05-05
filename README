@@ -1,21 +1,26 @@
 setup.sh installs dependencies, clones and builds grpc, and generates a Makefile in the directory cmake/build
 
-1.1 Replication Strategy
-    The primary/backup replication strategy is basically the entirety of server/server.cc
-1.2 Durability
-    server/server.cc: 126-178, 251-289
-1.3 Crash Recovery Protocol
-    server/server.cc: 195-249, 417-431, 528-587, 607-621
-2.1 Correctness
-    Availability:
-        server/server.cc: 546-587
-        client/client.cc: 146-148, 172-174
-    Strong Consistency:
-        server/server.cc: 59, 359-370, 409-442
-    Testing Strategy:
-        server/server.cc: 263-272
-2.2 Performance
-    There aren't any concrete lines of code to point to here. 
-    We created other branches to add code for measurement experiments.
+Server Instructions:
 
-Demo videos of performance are here: https://drive.google.com/drive/folders/1qoISpaF0hyk2rpJqUxGmOJYN-Fg_hEwg?usp=sharing
+Usage:
+./server <id> <listen_port> <servers_file> [is_primary]
+
+id: The ID of this server process
+listen port: The port number this server should listen on
+servers_file: A file of ip:port pairs for the other servers in the cluster. For example, if you had three servers running on the same machine, and they listened on ports 10001, 10002, and 10003, the servers file of the first server would be
+127.0.0.1:10002
+127.0.0.1:10003
+
+is_primary: Optional parameter. If any value is given for this parameter, the server starts as as the leader. If it is not given, it starts as a follower
+
+Client Instructions:
+
+Usage:
+./client <servers_file>
+
+servers_file: A file of ip:port pairs for the other servers in the cluster. For example, if you had three servers running on the same machine, and they listened on ports 10001, 10002, and 10003, the servers file would be
+127.0.0.1:10001
+127.0.0.1:10002
+127.0.0.1:10003
+
+Them, follow the prompt instructions to send a request

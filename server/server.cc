@@ -376,7 +376,7 @@ class RaftInterfaceClient {
       AppendEntriesResponse response;
       Entry* entry;
 
-      std::cout << "Sending append entry to " << clientIdx << "for term " << term << std::endl;
+      std::cout << "Sending append entry to " << serverIdx << "for term " << term << std::endl;
 
       bool success = false;
       uint64_t update_index = 0;

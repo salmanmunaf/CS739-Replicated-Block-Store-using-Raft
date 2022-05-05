@@ -326,7 +326,7 @@ class RaftInterfaceClient {
 
     static void RequestVote(std::unique_ptr<RaftInterface::Stub> &stub,
         std::atomic<uint8_t> &yes_votes, std::atomic<uint8_t> &no_votes,
-        uint64_t term)
+        uint64_t term, int callingServerId)
     {
       ClientContext context;
       RequestVoteRequest request;
@@ -343,14 +343,14 @@ class RaftInterfaceClient {
 
       if (status.ok()) {
         if (response.vote_granted()) {
-          std::cout << "Yes vote\n";
+          std::cout << callingServerId << ": Yes vote\n";
           yes_votes.fetch_add(1);
         } else {
-          std::cout << "No vote\n";
+          std::cout << callingServerId << ": No vote\n";
           no_votes.fetch_add(1);
         }
       } else {
-        std::cout << "Comm error\n";
+        std::cout << callingServerId << ": Comm error\n";
         // For now, assume network failure stuff is a no vote
         no_votes.fetch_add(1);
       }
@@ -435,11 +435,12 @@ class RaftInterfaceClient {
       term = curTerm.fetch_add(1) + 1;
       voted_for = server_id;
       vote_lock.unlock();
+      std::cout << "Starting term: " << term << "\n";
 
       // Spawn threads to request the votes from our peers
       for (int i = 0; i < stubs.size(); i++) {
         std::thread t(RaftInterfaceClient::RequestVote,
-          std::ref(stubs[i]), std::ref(yes_votes), std::ref(no_votes), term);
+          std::ref(stubs[i]), std::ref(yes_votes), std::ref(no_votes), term, i);
         t.detach();
       }
 
@@ -448,7 +449,7 @@ class RaftInterfaceClient {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
       }
 
-      std::cout << "Hello\n";
+      std::cout << "Hello, received vote responses from all servers\n";
 
       if (yes_votes >= majority) {
         state = STATE_LEADER;
@@ -479,9 +480,13 @@ class RaftInterfaceClient {
           std::ref(stubs[i]), i, term));
       }
 
+      std::cout << "Append Entries sent for term: " << term << ", waiting for responses" << std::endl;
+
       for (auto it = threads.begin(); it != threads.end(); it++) {
         (*it).join();
       }
+
+      std::cout << "Append Entries sent for term: " << term << ", received responses" << std::endl;
 
       return 0;
     }

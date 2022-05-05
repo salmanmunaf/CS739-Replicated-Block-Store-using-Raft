@@ -375,6 +375,9 @@ class RaftInterfaceClient {
       AppendEntriesRequest request;
       AppendEntriesResponse response;
       Entry* entry;
+
+      std::cout << "Sending append entry to " << clientIdx << "for term " << term << std::endl;
+
       bool success = false;
       uint64_t update_index = 0;
 
@@ -414,6 +417,7 @@ class RaftInterfaceClient {
     RaftInterfaceClient(std::vector<std::string> other_servers) {
       for (auto it = other_servers.begin(); it != other_servers.end(); it++) {
         stubs.push_back(RaftInterface::NewStub(grpc::CreateChannel(*it, grpc::InsecureChannelCredentials())));
+        std::cout << "Initializing matchIndex and nextIndex" << std::endl;
         matchIndex.push_back(-1);
         nextIndex.push_back(-1);
       }
@@ -448,6 +452,7 @@ class RaftInterfaceClient {
 
       if (yes_votes >= majority) {
         state = STATE_LEADER;
+        std::cout << "Elected leader" << std::endl;
         for (int i = 0; i < stubs.size(); i++) {
           nextIndex[i] = raft_log.size();
           matchIndex[i] = 0;
@@ -466,7 +471,7 @@ class RaftInterfaceClient {
 
       term = curTerm;
 
-      std::cout << "Sending Append Entries" << std::endl;
+      std::cout << "Sending Append Entries for term: " << term << std::endl;
 
       // Spawn threads to do the heartbeat
       for (int i = 0; i < stubs.size(); i++) {
@@ -639,6 +644,9 @@ class RaftInterfaceImpl final : public RaftInterface::Service {
       uint64_t prevLogIndex = request->prev_log_index();
       uint64_t prevLogTerm = request->prev_log_term();
 
+      std::cout << "Recieved Append Entries from " <<  leaderId << " for term " << requestTerm <<
+        ", prevLogIndex: " << prevLogIndex << "and prevLogTerm: " << prevLogTerm << std::endl;
+
       last_comm_time = cur_time();
 
       if (requestTerm > curTerm) {
@@ -781,7 +789,7 @@ void handle_heartbeats(std::vector<std::string> other_servers) {
         ret = servers.StartElection();
 
         if (ret) {
-          std::cout << "Became the leader for term " << curTerm << "! Democracy works!\n";
+          std::cout << "Became the leader for term " << curTerm << ", id: " << server_id << "! Democracy works!\n";
         } else {
           std::cout << "Did not become the leader\n";
           last_comm_time = cur_time();

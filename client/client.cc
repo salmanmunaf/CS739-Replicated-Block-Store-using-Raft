@@ -131,7 +131,7 @@ class RBSClient {
     std::unique_ptr<RBS::Stub> stub_;
 };
 
-int do_read(RBSClient* serverArr, off_t offset) {
+int do_read(std::vector<RBSClient> &serverArr, off_t offset) {
     bool first_try = true;
     int result = -1, retry = 1;
     uint64_t request_start_time = cur_time();
@@ -152,7 +152,7 @@ int do_read(RBSClient* serverArr, off_t offset) {
     return primary;
 }
 
-int do_write(RBSClient* serverArr, off_t offset, std::string str) {
+int do_write(std::vector<RBSClient> &serverArr, off_t offset, std::string str) {
     bool first_try = true;
     int result = -1, retry = 1;
     uint64_t request_start_time = cur_time();
@@ -172,30 +172,30 @@ int do_write(RBSClient* serverArr, off_t offset, std::string str) {
     return primary;
 }
 
+void process_server_file(std::vector<std::string> &list, std::string filename) {
+  std::ifstream file(filename);
+  std::string line;
+
+  if (file.is_open()) {
+    while(std::getline(file, line)) {
+      list.push_back(line);
+    }
+
+    file.close();
+  }
+}
+
 int main(int argc, char** argv) {
 
-  std::string server1 = argv[1];
-  std::string server2 = argv[2];
-  std::string server3 = argv[3];
-  std::string server4 = argv[4];
-  std::string server5 = argv[5];
+  std::string server_file = argv[1];
+  std::vector<std::string> servers;
 
-  RBSClient rbsClient1(
-      grpc::CreateChannel(server1, grpc::InsecureChannelCredentials()));
-  RBSClient rbsClient2(
-      grpc::CreateChannel(server2, grpc::InsecureChannelCredentials()));
-  RBSClient rbsClient3(
-      grpc::CreateChannel(server3, grpc::InsecureChannelCredentials()));
-  RBSClient rbsClient4(
-      grpc::CreateChannel(server4, grpc::InsecureChannelCredentials()));
-  RBSClient rbsClient5(
-      grpc::CreateChannel(server5, grpc::InsecureChannelCredentials()));
+  process_server_file(servers, server_file);
 
-  RBSClient serverArr [5] = { RBSClient(grpc::CreateChannel(server1, grpc::InsecureChannelCredentials())),
-                            RBSClient(grpc::CreateChannel(server2, grpc::InsecureChannelCredentials())),
-                            RBSClient(grpc::CreateChannel(server3, grpc::InsecureChannelCredentials())),
-                            RBSClient(grpc::CreateChannel(server4, grpc::InsecureChannelCredentials())),
-                            RBSClient(grpc::CreateChannel(server5, grpc::InsecureChannelCredentials())) };
+  std::vector<RBSClient> serverArr;
+  for (int i = 0; i < servers.size(); i++) {
+    serverArr.push_back(RBSClient(grpc::CreateChannel(servers[i], grpc::InsecureChannelCredentials())));
+  }
 
   int user_input;
   off_t offset;
@@ -204,13 +204,13 @@ int main(int argc, char** argv) {
   primary=1;
 
   // one-of read
-  if (argc == 4) {
+  if (argc == 3) {
     offset = std::stoull(std::string(argv[3]));
     do_read(serverArr, offset);
     return 0;
   }
   // one-of write
-  if (argc == 5) {
+  if (argc == 4) {
     offset = std::stoull(std::string(argv[3]));
     str = std::string(argv[4]);
     str.resize(4096, ' ');
@@ -218,7 +218,7 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  std::cout << "Enter operation: ";
+  std::cout << "Enter operation (1 = read, 2 = write, 0 = exit): ";
   std::cin >> user_input;    // input = 1 for read, 2 for write, 0 to exit
   while(user_input != 0) {
 

@@ -81,7 +81,7 @@ std::vector<int64_t> nextIndex;
 std::vector<int64_t> matchIndex;
 std::atomic<int64_t> last_comm_time(0);
 std::atomic<int64_t> curTerm(0);
-std::atomic<int64_t_t> voted_for(HAVENT_VOTED);
+std::atomic<int64_t> voted_for(HAVENT_VOTED);
 std::atomic<int64_t> commit_index(-1);
 std::atomic<int64_t> last_applied(-1);
 int64_t current_leader_id = 0;
@@ -369,7 +369,7 @@ class RaftInterfaceClient {
       stub->AppendEntries(&context, request, &response);
     }
 
-    static void AppendEntries(std::unique_ptr<RaftInterface::Stub> &stub, int64_t_t serverIdx, int64_t_t term)
+    static void AppendEntries(std::unique_ptr<RaftInterface::Stub> &stub, int64_t serverIdx, int64_t term)
     {
       ClientContext context;
       AppendEntriesRequest request;
@@ -379,7 +379,7 @@ class RaftInterfaceClient {
       std::cout << "Sending append entry to " << serverIdx << "for term " << term << std::endl;
 
       bool success = false;
-      int64_t_t update_index = 0;
+      int64_t update_index = 0;
 
       request.set_term(curTerm);
       request.set_leader_id(server_id);
@@ -608,10 +608,10 @@ class RaftInterfaceImpl final : public RaftInterface::Service {
                 RequestVoteResponse *reply) override {
     int64_t requestTerm = request->term();
     int64_t candidateId = request->candidate_id();
-    int64_t_t requestLastLogIndex = request->last_log_index();
-    int64_t_t requestLastLogTerm = request->last_log_term();
-    int64_t_t ourLastLogIndex;
-    int64_t_t ourLastLogTerm;
+    int64_t requestLastLogIndex = request->last_log_index();
+    int64_t requestLastLogTerm = request->last_log_term();
+    int64_t ourLastLogIndex;
+    int64_t ourLastLogTerm;
 
     std::cout << "Received RequestVote from " << candidateId << " for term " << requestTerm << std::endl;
 
@@ -656,10 +656,10 @@ out:
   Status AppendEntries(ServerContext *context, const AppendEntriesRequest * request,
                 AppendEntriesResponse *reply) override {
 
-      int64_t_t requestTerm = request->term();
-      int64_t_t leaderId = request->leader_id();
-      int64_t_t prevLogIndex = request->prev_log_index();
-      int64_t_t prevLogTerm = request->prev_log_term();
+      int64_t requestTerm = request->term();
+      int64_t leaderId = request->leader_id();
+      int64_t prevLogIndex = request->prev_log_index();
+      int64_t prevLogTerm = request->prev_log_term();
 
       std::cout << "Recieved Append Entries from " <<  leaderId << " for term " << requestTerm <<
         ", prevLogIndex: " << prevLogIndex << "and prevLogTerm: " << prevLogTerm << std::endl;
@@ -707,7 +707,7 @@ out:
         raft_log.erase(raft_log.begin()+prevLogIndex+1, raft_log.end());
 
       // if(request->entries().size() > 0) {
-      //   int64_t_t entryTerm = request->entries(0).term();
+      //   int64_t entryTerm = request->entries(0).term();
       //   if (raft_log[prevLogIndex+1].term != entryTerm) {
       //     raft_log.erase(raft_log.begin()+prevLogIndex+1, raft_log.end());
       //   }
@@ -725,9 +725,9 @@ out:
         log_lock.unlock();
       }
 
-      int64_t_t leaderCommitIdx = request->leader_commit();
+      int64_t leaderCommitIdx = request->leader_commit();
       if (leaderCommitIdx > commit_index) { //comparison should be with commit index
-        int64_t_t new_commit_index = std::min(leaderCommitIdx, raft_log.size()-1);
+        int64_t new_commit_index = std::min(leaderCommitIdx, raft_log.size()-1);
 
         // Apply the log entries
         apply_entries(commit_index + 1, new_commit_index);

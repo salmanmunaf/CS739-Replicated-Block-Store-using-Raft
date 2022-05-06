@@ -727,7 +727,7 @@ out:
 
       int64_t leaderCommitIdx = request->leader_commit();
       if (leaderCommitIdx > commit_index) { //comparison should be with commit index
-        int64_t new_commit_index = std::min(leaderCommitIdx, raft_log.size()-1);
+        int64_t new_commit_index = std::min(leaderCommitIdx, (int64_t)(raft_log.size()-1));
 
         // Apply the log entries
         apply_entries(commit_index + 1, new_commit_index);

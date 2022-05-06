@@ -411,7 +411,14 @@ class RaftInterfaceClient {
         success = response.success();
         if (!success) {
           std::cout << "Unsuccessful response received from server: " << serverIdx << " for term: " << term << std::endl;
-          nextIndex[serverIdx]--;
+
+          // If the write fails when we are trying to write the first index,
+          // it is likely that the server is down, so stop trying for now
+          if (nextIndex[serverIdx] > 0) {
+            nextIndex[serverIdx]--;
+          } else {
+            return;
+          }
         }
       }
 

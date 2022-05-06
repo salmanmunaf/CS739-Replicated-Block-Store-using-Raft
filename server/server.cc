@@ -617,7 +617,10 @@ class RaftInterfaceImpl final : public RaftInterface::Service {
 
     log_lock.lock();
     ourLastLogIndex = raft_log.size() - 1;
-    ourLastLogTerm = raft_log[ourLastLogIndex].term;
+    if (ourLastLogIndex >= 0)
+        ourLastLogTerm = raft_log[ourLastLogIndex].term;
+    else
+        ourLastLogTerm = 0;
     log_lock.unlock();
 
     // Use a lock to make sure we don't respond to two simultaneous vote requests

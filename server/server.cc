@@ -665,7 +665,7 @@ out:
       int64_t prevLogTerm = request->prev_log_term();
 
       std::cout << "Recieved Append Entries from " <<  leaderId << " for term " << requestTerm <<
-        ", prevLogIndex: " << prevLogIndex << "and prevLogTerm: " << prevLogTerm << std::endl;
+        ", prevLogIndex: " << prevLogIndex << " and prevLogTerm: " << prevLogTerm << std::endl;
 
       last_comm_time = cur_time();
 
@@ -700,7 +700,7 @@ out:
       }
 
       // if prevlogindex is more than our last index, or term on prev log index is not same
-      if(prevLogIndex >= raft_log.size() || (prevLogIndex >= 0 && raft_log[prevLogIndex].term != prevLogTerm)) {
+      if(prevLogIndex >= (int64_t)raft_log.size() || (prevLogIndex >= 0 && raft_log[prevLogIndex].term != prevLogTerm)) {
         reply->set_success(false);
         return Status::OK;
       }
@@ -739,6 +739,7 @@ out:
       }
 
 
+    reply->set_success(true);
     return Status::OK;
   }
 };

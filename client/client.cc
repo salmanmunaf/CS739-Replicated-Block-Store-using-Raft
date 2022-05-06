@@ -134,7 +134,7 @@ class RBSClient {
 int do_read(std::vector<RBSClient> &serverArr, off_t offset) {
     bool first_try = true;
     int result = -1, retry = 1;
-    int64 request_start_time = cur_time();
+    int64_t request_start_time = cur_time();
 
     while (result != BLOCKSTORE_SUCCESS && cur_time() - request_start_time < TIMEOUT) {
         // Wait some time between sending requests
@@ -155,7 +155,7 @@ int do_read(std::vector<RBSClient> &serverArr, off_t offset) {
 int do_write(std::vector<RBSClient> &serverArr, off_t offset, std::string str) {
     bool first_try = true;
     int result = -1, retry = 1;
-    int64 request_start_time = cur_time();
+    int64_t request_start_time = cur_time();
 
     while (result != BLOCKSTORE_SUCCESS && cur_time() - request_start_time < TIMEOUT) {
         if (!first_try) {
@@ -200,7 +200,7 @@ int main(int argc, char** argv) {
   int user_input;
   off_t offset;
   std::string str;
-  int64 request_start_time;
+  int64_t request_start_time;
   primary=1;
 
   // one-of read

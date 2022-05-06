@@ -58,8 +58,8 @@ using namespace cs739;
 #define HAVENT_VOTED (-1)
 
 struct LogEntry {
-    int64 term;
-    int64 address;
+    int64_t term;
+    int64_t address;
     char data[BLOCK_SIZE];
 };
 
@@ -77,19 +77,19 @@ enum server_state {
 };
 
 std::vector<struct LogEntry> raft_log;
-std::vector<int64> nextIndex;
-std::vector<int64> matchIndex;
-std::atomic<int64> last_comm_time(0);
-std::atomic<int64> curTerm(0);
-std::atomic<int64_t> voted_for(HAVENT_VOTED);
-std::atomic<int64> commit_index(-1);
-std::atomic<int64> last_applied(-1);
-int64 current_leader_id = 0;
-int64 server_id;
-int64 num_servers;
+std::vector<int64_t> nextIndex;
+std::vector<int64_t> matchIndex;
+std::atomic<int64_t> last_comm_time(0);
+std::atomic<int64_t> curTerm(0);
+std::atomic<int64_t_t> voted_for(HAVENT_VOTED);
+std::atomic<int64_t> commit_index(-1);
+std::atomic<int64_t> last_applied(-1);
+int64_t current_leader_id = 0;
+int64_t server_id;
+int64_t num_servers;
 enum server_state state;
 
-bool is_block_aligned(int64 addr) {
+bool is_block_aligned(int64_t addr) {
   return (addr & (BLOCK_SIZE - 1)) == 0;
 }
 
@@ -199,7 +199,7 @@ err:
   return -1;
 }
 
-int64 find_address_from_path(std::string undo_path) {
+int64_t find_address_from_path(std::string undo_path) {
   // copy the path because the delimiting code will modify the string
   std::string s(undo_path);
   std::string token;
@@ -216,7 +216,7 @@ int64 find_address_from_path(std::string undo_path) {
 
 int recover_undo_file(std::string undo_path) {
   char* undo_buf = new char[BLOCK_SIZE];
-  int64 address;
+  int64_t address;
   int undo_write_size;
   int fd;
   int ret;
@@ -270,10 +270,10 @@ err:
   return -1;
 }
 
-int do_atomic_write(int64 address, std::string data) {
+int do_atomic_write(int64_t address, std::string data) {
   std::string undo_path = FILE_PATH + "." + std::to_string(address) + ".undo";
   const char* write_buf = data.c_str();
-  int64 write_hash = std::hash<std::string>{}(data);
+  int64_t write_hash = std::hash<std::string>{}(data);
   int fd;
   int ret;
 
@@ -307,7 +307,7 @@ err:
   return -1;
 }
 
-void apply_entries(int64 first, int64 last) {
+void apply_entries(int64_t first, int64_t last) {
   for (int i = first; i <= last; i++) {
     LogEntry entry;
 
@@ -326,7 +326,7 @@ class RaftInterfaceClient {
 
     static void RequestVote(std::unique_ptr<RaftInterface::Stub> &stub,
         std::atomic<uint8_t> &yes_votes, std::atomic<uint8_t> &no_votes,
-        int64 term, int callingServerId)
+        int64_t term, int callingServerId)
     {
       ClientContext context;
       RequestVoteRequest request;
@@ -356,7 +356,7 @@ class RaftInterfaceClient {
       }
     }
 
-    static void EmptyAppendEntries(std::unique_ptr<RaftInterface::Stub> &stub, int64 term)
+    static void EmptyAppendEntries(std::unique_ptr<RaftInterface::Stub> &stub, int64_t term)
     {
       Status status;
       ClientContext context;
@@ -369,7 +369,7 @@ class RaftInterfaceClient {
       stub->AppendEntries(&context, request, &response);
     }
 
-    static void AppendEntries(std::unique_ptr<RaftInterface::Stub> &stub, int64_t serverIdx, int64_t term)
+    static void AppendEntries(std::unique_ptr<RaftInterface::Stub> &stub, int64_t_t serverIdx, int64_t_t term)
     {
       ClientContext context;
       AppendEntriesRequest request;
@@ -379,7 +379,7 @@ class RaftInterfaceClient {
       std::cout << "Sending append entry to " << serverIdx << "for term " << term << std::endl;
 
       bool success = false;
-      int64_t update_index = 0;
+      int64_t_t update_index = 0;
 
       request.set_term(curTerm);
       request.set_leader_id(server_id);
@@ -434,8 +434,8 @@ class RaftInterfaceClient {
       // Start with one yes vote (we are voting for ourself)
       std::atomic<uint8_t> yes_votes(1);
       std::atomic<uint8_t> no_votes(0);
-      int64 majority = (num_servers / 2) + 1;
-      int64 term;
+      int64_t majority = (num_servers / 2) + 1;
+      int64_t term;
 
       // Increment the term
       vote_lock.lock();
@@ -475,7 +475,7 @@ class RaftInterfaceClient {
 
     int Heartbeat() {
       std::vector<std::thread> threads;
-      int64 term;
+      int64_t term;
 
       term = curTerm;
 
@@ -507,8 +507,8 @@ class RBSImpl final : public RBS::Service {
                   Response* reply) override {
     std::cout << "Data to read at offset: " << request->address() << std::endl;
     char* buf;
-    int64 address = request->address();
-    int64 block = address / BLOCK_SIZE;
+    int64_t address = request->address();
+    int64_t block = address / BLOCK_SIZE;
     int ret;
 
     // Return without doing anything if we are not the primary
@@ -557,7 +557,7 @@ err:
     Status status;
     int ret;
     int entry_index;
-    int64 address = request->address();
+    int64_t address = request->address();
     struct LogEntry log_entry;
     std::cout << "Data to write: " << request->data().c_str() << std::endl;
 
@@ -606,12 +606,12 @@ public:
 class RaftInterfaceImpl final : public RaftInterface::Service {
   Status RequestVote(ServerContext *context, const RequestVoteRequest *request,
                 RequestVoteResponse *reply) override {
-    int64 requestTerm = request->term();
-    int64 candidateId = request->candidate_id();
-    int64_t requestLastLogIndex = request->last_log_index();
-    int64_t requestLastLogTerm = request->last_log_term();
-    int64_t ourLastLogIndex;
-    int64_t ourLastLogTerm;
+    int64_t requestTerm = request->term();
+    int64_t candidateId = request->candidate_id();
+    int64_t_t requestLastLogIndex = request->last_log_index();
+    int64_t_t requestLastLogTerm = request->last_log_term();
+    int64_t_t ourLastLogIndex;
+    int64_t_t ourLastLogTerm;
 
     std::cout << "Received RequestVote from " << candidateId << " for term " << requestTerm << std::endl;
 
@@ -656,10 +656,10 @@ out:
   Status AppendEntries(ServerContext *context, const AppendEntriesRequest * request,
                 AppendEntriesResponse *reply) override {
 
-      int64_t requestTerm = request->term();
-      int64_t leaderId = request->leader_id();
-      int64_t prevLogIndex = request->prev_log_index();
-      int64_t prevLogTerm = request->prev_log_term();
+      int64_t_t requestTerm = request->term();
+      int64_t_t leaderId = request->leader_id();
+      int64_t_t prevLogIndex = request->prev_log_index();
+      int64_t_t prevLogTerm = request->prev_log_term();
 
       std::cout << "Recieved Append Entries from " <<  leaderId << " for term " << requestTerm <<
         ", prevLogIndex: " << prevLogIndex << "and prevLogTerm: " << prevLogTerm << std::endl;
@@ -707,7 +707,7 @@ out:
         raft_log.erase(raft_log.begin()+prevLogIndex+1, raft_log.end());
 
       // if(request->entries().size() > 0) {
-      //   int64_t entryTerm = request->entries(0).term();
+      //   int64_t_t entryTerm = request->entries(0).term();
       //   if (raft_log[prevLogIndex+1].term != entryTerm) {
       //     raft_log.erase(raft_log.begin()+prevLogIndex+1, raft_log.end());
       //   }
@@ -725,9 +725,9 @@ out:
         log_lock.unlock();
       }
 
-      int64_t leaderCommitIdx = request->leader_commit();
+      int64_t_t leaderCommitIdx = request->leader_commit();
       if (leaderCommitIdx > commit_index) { //comparison should be with commit index
-        int64_t new_commit_index = std::min(leaderCommitIdx, raft_log.size()-1);
+        int64_t_t new_commit_index = std::min(leaderCommitIdx, raft_log.size()-1);
 
         // Apply the log entries
         apply_entries(commit_index + 1, new_commit_index);
@@ -764,9 +764,9 @@ void RunServer(std::string listen_port, std::vector<std::string> other_servers) 
 }
 
 void commit_thread() {
-    int64 last_log_index = 0;
-    int64 majority = (num_servers / 2) + 1;
-    int64 votes;
+    int64_t last_log_index = 0;
+    int64_t majority = (num_servers / 2) + 1;
+    int64_t votes;
 
     while (true) {
         if (state != STATE_LEADER)
@@ -783,7 +783,7 @@ void commit_thread() {
 
             if (votes >= majority) {
                 // We can only commit if the log has an entry of out term
-                int64 term;
+                int64_t term;
 
                 log_lock.lock();
                 term = raft_log[i].term;
@@ -812,8 +812,8 @@ void handle_heartbeats(std::vector<std::string> other_servers) {
     } else {
       // If we haven't heard from the leader since the timeout time,
       // let's try to become the leader
-      int64 last_time = last_comm_time.load();
-      int64 cur = cur_time();
+      int64_t last_time = last_comm_time.load();
+      int64_t cur = cur_time();
 
       if (cur_time() > last_time && cur_time() - last_comm_time.load() >= ELECTION_TIMEOUT) {
         std::cout << "Trying to become the leader!\n";

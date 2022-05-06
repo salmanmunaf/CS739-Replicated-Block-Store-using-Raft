@@ -608,42 +608,47 @@ class RaftInterfaceImpl final : public RaftInterface::Service {
                 RequestVoteResponse *reply) override {
     uint64_t requestTerm = request->term();
     uint64_t candidateId = request->candidate_id();
+    int64_t requestLastLogIndex = request->last_log_index();
+    int64_t requestLastLogTerm = request->last_log_term();
+    int64_t ourLastLogIndex;
+    int64_t ourLastLogTerm;
 
     std::cout << "Received RequestVote from " << candidateId << " for term " << requestTerm << std::endl;
+
+    log_lock.lock();
+    ourLastLogIndex = raft_log.size() - 1;
+    ourLastLogTerm = raft_log[ourLastLogIndex].term;
+    log_lock.unlock();
 
     // Use a lock to make sure we don't respond to two simultaneous vote requests
     vote_lock.lock();
 
     if (requestTerm > curTerm) {
-      state = STATE_FOLLOWER;
-      curTerm = requestTerm;
-      voted_for = candidateId;
-      reply->set_term(requestTerm);
-      reply->set_vote_granted(true);
-
-      last_comm_time = cur_time();
-    } else if (state == STATE_LEADER) {
-      // From the last if case, we know that requestTerm <= curTerm
-      // and we're the leader, so let the requester know we're the leader
-      reply->set_term(curTerm);
-      reply->set_vote_granted(false);
-    } else {
-      if (requestTerm < curTerm || voted_for != HAVENT_VOTED) {
+        state = STATE_FOLLOWER;
+        curTerm = requestTerm;
+        voted_for = HAVENT_VOTED;
+    } else if (requestTerm < curTerm) {
         reply->set_term(curTerm);
         reply->set_vote_granted(false);
-      } else {
-        // If we're a candidate, this sets us back to being a follower
-        state = STATE_FOLLOWER;
+        goto out;
+    }
 
-        curTerm = requestTerm;
+    reply->set_term(curTerm);
+
+    if (requestLastLogTerm < ourLastLogTerm) {
+        reply->set_vote_granted(false);
+    } else if (requestLastLogTerm == ourLastLogTerm && requestLastLogIndex < ourLastLogIndex) {
+        reply->set_vote_granted(false);
+    } else if (voted_for != HAVENT_VOTED) {
+        reply->set_vote_granted(false);
+    } else {
         voted_for = candidateId;
-        reply->set_term(requestTerm);
         reply->set_vote_granted(true);
 
         last_comm_time = cur_time();
-      }
     }
 
+out:
     vote_lock.unlock();
     return Status::OK;
   }

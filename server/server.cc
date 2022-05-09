@@ -373,7 +373,6 @@ class RaftInterfaceClient {
 
     static void AppendEntries(std::unique_ptr<RaftInterface::Stub> &stub, int64_t serverIdx, int64_t term)
     {
-      ClientContext context;
       AppendEntriesRequest request;
       AppendEntriesResponse response;
       Entry* entry;
@@ -388,6 +387,10 @@ class RaftInterfaceClient {
       request.set_leader_commit(commit_index);
 
       while (!success) {
+        // Create ClientContext as unique_ptr here because reusing a context
+        // when retrying an RPC can cause gRPC to trash
+        auto context = std::make_unique<ClientContext>();;
+
         log_lock.lock();
         // This represents the last index we are sending to the follower
         update_index = raft_log.size() - 1;
@@ -409,7 +412,7 @@ class RaftInterfaceClient {
 
         log_lock.unlock();
 
-        stub->AppendEntries(&context, request, &response);
+        stub->AppendEntries(context.get(), request, &response);
         success = response.success();
         if (!success) {
           std::cout << "Unsuccessful response received from server: " << serverIdx << " for term: " << term << std::endl;

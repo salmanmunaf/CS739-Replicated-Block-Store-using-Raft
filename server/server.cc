@@ -27,6 +27,7 @@
 #include <thread>
 #include <fstream>
 #include <algorithm>
+#include <random>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -813,7 +814,10 @@ sleep:
 
 void handle_heartbeats(std::vector<std::string> other_servers) {
   RaftInterfaceClient servers(other_servers);
-  const int ELECTION_TIMEOUT = 5000;
+  std::random_device dev;
+  std::mt19937 rng(dev());
+  std::uniform_int_distribution<std::mt19937::result_type> dist(0, 100);
+  const int ELECTION_TIMEOUT = 5000 + dist(rng);
   int ret;
 
   while (true) {

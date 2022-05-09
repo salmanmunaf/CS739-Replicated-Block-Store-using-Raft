@@ -145,6 +145,11 @@ int do_read(std::vector<RBSClient> &serverArr, off_t offset) {
 
         RBSClient &rbsClient = serverArr[primary];
         result = rbsClient.Read(offset);
+
+        // If we couldn't communicate with the given server, increment the primary
+        if (result == -1) {
+            primary = (primary + 1) % serverArr.size();
+        }
     
         std::cout << primary << ": " << result << std::endl;
     }
@@ -165,6 +170,11 @@ int do_write(std::vector<RBSClient> &serverArr, off_t offset, std::string str) {
 
         RBSClient &rbsClient = serverArr[primary];
         result = rbsClient.Write(offset, std::string(str));
+
+        // If we couldn't communicate with the given server, increment the primary
+        if (result == -1) {
+            primary = (primary + 1) % serverArr.size();
+        }
 
         std::cout << primary << ": " << result << std::endl;
     }

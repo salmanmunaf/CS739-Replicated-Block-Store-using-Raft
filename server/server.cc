@@ -326,7 +326,8 @@ class RaftInterfaceClient {
     std::vector<std::unique_ptr<RaftInterface::Stub>> stubs;
 
     static void RequestVote(std::unique_ptr<RaftInterface::Stub> &stub,
-        std::atomic<uint8_t> &yes_votes, std::atomic<uint8_t> &no_votes,
+        std::shared_ptr<std::atomic<uint8_t>> yes_votes,
+        std::shared_ptr<std::atomic<uint8_t>> no_votes,
         int64_t term, int callingServerId)
     {
       ClientContext context;
@@ -345,15 +346,15 @@ class RaftInterfaceClient {
       if (status.ok()) {
         if (response.vote_granted()) {
           std::cout << callingServerId << ": Yes vote\n";
-          yes_votes.fetch_add(1);
+          (*yes_votes).fetch_add(1);
         } else {
           std::cout << callingServerId << ": No vote\n";
-          no_votes.fetch_add(1);
+          (*no_votes).fetch_add(1);
         }
       } else {
         std::cout << callingServerId << ": Comm error\n";
         // For now, assume network failure stuff is a no vote
-        no_votes.fetch_add(1);
+        (*no_votes).fetch_add(1);
       }
     }
 
@@ -440,8 +441,8 @@ class RaftInterfaceClient {
 
     int StartElection() {
       // Start with one yes vote (we are voting for ourself)
-      std::atomic<uint8_t> yes_votes(1);
-      std::atomic<uint8_t> no_votes(0);
+      auto yes_votes = std::make_shared<std::atomic<uint8_t>>(1);
+      auto no_votes = std::make_shared<std::atomic<uint8_t>>(0);
       int64_t majority = (num_servers / 2) + 1;
       int64_t term;
 
@@ -460,13 +461,13 @@ class RaftInterfaceClient {
       }
 
       // Wait until we have a majority of votes in some direction
-      while (yes_votes < majority && no_votes < majority) {
+      while (*yes_votes < majority && *no_votes < majority) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
       }
 
       std::cout << "Hello, received vote responses from all servers\n";
 
-      if (yes_votes >= majority) {
+      if (*yes_votes >= majority) {
         state = STATE_LEADER;
         std::cout << "Elected leader" << std::endl;
         for (int i = 0; i < stubs.size(); i++) {

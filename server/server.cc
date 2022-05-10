@@ -311,12 +311,27 @@ err:
 void apply_entries(int64_t first, int64_t last) {
   for (int i = first; i <= last; i++) {
     LogEntry entry;
+    int64_t address;
+    int64_t block;
 
     log_lock.lock();
     entry = raft_log[i];
     log_lock.unlock();
 
+    address = entry.address;
+    block = address / BLOCK_SIZE;
+
+    lockArray[block].lock();
+    if (!is_block_aligned(address)) {
+        lockArray[block + 1].lock();
+    }
+
     do_atomic_write(entry.address, std::string(entry.data, BLOCK_SIZE));
+
+    if (!is_block_aligned(address)) {
+        lockArray[block + 1].unlock();
+    }
+    lockArray[block].unlock();
   }
 }
 

@@ -348,13 +348,21 @@ class RaftInterfaceClient {
       ClientContext context;
       RequestVoteRequest request;
       RequestVoteResponse response;
+      int64_t last_log_index = 0;
 
       // Fill in the data
       request.set_term(term);
       request.set_candidate_id(server_id);
-      // TODO: Replace these placeholders with real values
-      request.set_last_log_index(0);
-      request.set_last_log_term(0);
+
+      // Get the last log index and term
+      log_lock.lock();
+      last_log_index = raft_log.size() - 1;
+      request.set_last_log_index(last_log_index);
+      if (last_log_index >= 0)
+        request.set_last_log_term(raft_log[last_log_index].term);
+      else
+        request.set_last_log_term(0);
+      log_lock.unlock();
 
       Status status = stub->RequestVote(&context, request, &response);
 

@@ -694,7 +694,7 @@ class RaftInterfaceClient {
         std::cout << "Elected leader" << std::endl;
         for (int i = 0; i < stubs.size(); i++) {
           nextIndex[i] = raft_log.size();
-          matchIndex[i] = 0;
+          matchIndex[i] = -1;
         }
         return 1;
       } else {

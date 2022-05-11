@@ -1143,7 +1143,7 @@ int main(int argc, char** argv) {
   read_raft_log();
 
   // On startup, give the primary an extra few seconds to send a heartbeat
-  last_comm_time = cur_time() + 10000;
+  last_comm_time = cur_time() + 20000;
 
   std::thread server_thread(RunServer, listen_port, other_servers);
   std::thread ldr_commit_thread(commit_thread);

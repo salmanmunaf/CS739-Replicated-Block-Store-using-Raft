@@ -100,6 +100,21 @@ bool is_block_aligned(int64_t addr) {
   return (addr & (BLOCK_SIZE - 1)) == 0;
 }
 
+void displayLog() {
+  std::cout<<"My current log: "<<std::endl;
+  LogEntry entry;
+
+  for(int i=0;i<raft_log.size();i++) {
+      std::cout<<i<<"\t";
+  }
+  std::cout<<std::endl;
+  for(int i=0;i<raft_log.size();i++) {
+    entry = raft_log[i];
+    std::cout<<entry.term<<"\t";
+  }
+  std::cout<<std::endl;
+}
+
 int read_block_data(std::string block_file, char *buf, off_t offset) {
   int fd;
   int ret;
@@ -601,7 +616,7 @@ class RaftInterfaceClient {
       AppendEntriesResponse response;
       Entry* entry;
 
-      std::cout << "Sending append entry to " << serverIdx << "for term " << term << std::endl;
+      // std::cout << "Sending append entry to " << serverIdx << "for term " << term << std::endl;
 
       bool success = false;
       int64_t update_index = 0;
@@ -660,7 +675,7 @@ class RaftInterfaceClient {
     RaftInterfaceClient(std::vector<std::string> other_servers) {
       for (auto it = other_servers.begin(); it != other_servers.end(); it++) {
         stubs.push_back(RaftInterface::NewStub(grpc::CreateChannel(*it, grpc::InsecureChannelCredentials())));
-        std::cout << "Initializing matchIndex and nextIndex" << std::endl;
+        // std::cout << "Initializing matchIndex and nextIndex" << std::endl;
         matchIndex.push_back(-1);
         nextIndex.push_back(-1);
       }
@@ -696,7 +711,7 @@ class RaftInterfaceClient {
 
       if (*yes_votes >= majority) {
         state = STATE_LEADER;
-        std::cout << "Elected leader" << std::endl;
+        // std::cout << "Elected leader" << std::endl;
         for (int i = 0; i < stubs.size(); i++) {
           nextIndex[i] = raft_log.size();
           matchIndex[i] = -1;
@@ -723,13 +738,13 @@ class RaftInterfaceClient {
           std::ref(stubs[i]), i, term));
       }
 
-      std::cout << "Append Entries sent for term: " << term << ", waiting for responses" << std::endl;
+      // std::cout << "Append Entries sent for term: " << term << ", waiting for responses" << std::endl;
 
       for (auto it = threads.begin(); it != threads.end(); it++) {
         (*it).join();
       }
 
-      std::cout << "Append Entries sent for term: " << term << ", received responses" << std::endl;
+      // std::cout << "Append Entries sent for term: " << term << ", received responses" << std::endl;
 
       return 0;
     }
@@ -817,6 +832,12 @@ err:
 
     log_lock.unlock();
 
+    displayLog();
+
+    // if(request->to_exit() == 1) {
+    //   exit(0);
+    // }
+
     // Wait for the update to be commited before returning to the client
     while (commit_index < entry_index) {
         // Have we somehow been demoted from leader?
@@ -833,6 +854,27 @@ err:
     reply->set_return_code(BLOCKSTORE_SUCCESS);
     return Status::OK;
   }
+
+  Status DisplayLog(ServerContext* context, const LogRequest* request,
+                  Response* reply) override {
+    
+    Status status;
+    // LogEntry entry;
+    // for(int i=0;i<raft_log.size();i++) {
+    //   std::cout<<i<<"\t";
+    // }
+    // std::cout<<std::endl;
+    // for(int i=0;i<raft_log.size();i++) {
+    //   entry = raft_log[i];
+    //   std::cout<<entry.term<<"\t";
+    // }
+    // std::cout<<std::endl;
+
+    displayLog();
+    reply->set_return_code(BLOCKSTORE_SUCCESS);
+    return Status::OK;
+  }
+
 public:
   RBSImpl(std::vector<std::string> other_servers)
     : servers(other_servers) {}

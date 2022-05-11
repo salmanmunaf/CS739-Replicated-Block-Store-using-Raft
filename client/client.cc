@@ -127,6 +127,24 @@ class RBSClient {
         }
     }
 
+    int DisplayLog(int id) {
+      ClientContext context;
+
+      LogRequest request;
+      request.set_id(id);
+
+      Response response;
+
+      Status status = stub_->DisplayLog(&context, request, &response);
+
+      if(status.ok()) {
+        return response.return_code();
+      } else {
+        return -1;
+      }
+
+    }
+
   private:
     std::unique_ptr<RBS::Stub> stub_;
 };
@@ -228,7 +246,7 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  std::cout << "Enter operation (1 = read, 2 = write, 0 = exit): ";
+  std::cout << "Enter operation (1 = read, 2 = write, 3 = display log, 0 = exit): ";
   std::cin >> user_input;    // input = 1 for read, 2 for write, 0 to exit
   while(user_input != 0) {
 
@@ -237,7 +255,7 @@ int main(int argc, char** argv) {
 
     if(user_input == 1) {
         primary = do_read(serverArr, offset);
-    } else {
+    } else if (user_input == 2){
         
         std::cout << "Enter data to write: " << std::endl;
         std::cin >> str;
@@ -249,6 +267,12 @@ int main(int argc, char** argv) {
         std::cout << "Hash of data to write: " << std::hash<std::string>{}(str) << std::endl;
 
         primary = do_write(serverArr, offset, str);
+    } else {
+      std::cout<<"Enter server id: "<<std::endl;
+      int server_id;
+      std::cin>>server_id;
+      result = rbsClient.DisplayLog(server_id);
+      std::cout << "Server displayed log"<<std::endl;
     }
 
     std::cout << "Enter operation: ";

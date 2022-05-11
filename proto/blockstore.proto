@@ -7,11 +7,16 @@ service RBS {
   rpc CheckPrimary(EmptyPacket) returns(Response);
   rpc Read(ReadRequest) returns(Response);
   rpc Write(WriteRequest) returns(Response);
+  rpc DisplayLog(LogRequest) returns(Response);
 }
 
 service RaftInterface {
   rpc RequestVote (RequestVoteRequest) returns (RequestVoteResponse) {}
   rpc AppendEntries (AppendEntriesRequest) returns (AppendEntriesResponse) {}
+}
+
+message LogRequest {
+  int64 id = 1;
 }
 
 message RequestVoteRequest {

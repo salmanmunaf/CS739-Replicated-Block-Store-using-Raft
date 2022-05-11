@@ -146,7 +146,7 @@ int do_read(std::vector<RBSClient> &serverArr, off_t offset, ostream& output) {
         }
         first_try = false;
 
-        RBSClient &rbsClient = serverArr[primary];\
+        RBSClient &rbsClient = serverArr[primary];
         auto ts_read_start = std::chrono::steady_clock::now();
         result = rbsClient.Read(offset);
         auto ts_read_end = std::chrono::steady_clock::now();

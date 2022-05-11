@@ -1057,7 +1057,7 @@ void handle_heartbeats(std::vector<std::string> other_servers) {
       servers.Heartbeat();
       // TODO: We will want to lower this sleep time for performance, but for debugging
       // this helps with the logging output
-      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
     } else {
       // If we haven't heard from the leader since the timeout time,
       // let's try to become the leader

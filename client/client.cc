@@ -93,7 +93,7 @@ class RBSClient {
                 std::cout << std::hash<std::string>{}(response.data()) << std::endl;
                 return response.return_code();
             } else if (response.return_code() == BLOCKSTORE_NOT_PRIM) {
-                primary = response.primary();
+                primary = response.current_leader();
                 return response.return_code();
             }
             return response.error_code();
@@ -118,7 +118,7 @@ class RBSClient {
             if(return_code == BLOCKSTORE_SUCCESS) {
                 return response.return_code();
             } else if (return_code == BLOCKSTORE_NOT_PRIM) {
-                primary = response.primary();
+                primary = response.current_leader();
                 return response.return_code();
             }
             return response.error_code();

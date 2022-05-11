@@ -751,6 +751,7 @@ class RBSImpl final : public RBS::Service {
     if (state != STATE_LEADER) {
       reply->set_return_code(BLOCKSTORE_NOT_PRIM);
       reply->set_current_leader(current_leader_id);
+      reply->set_primary(current_leader_id);
       return Status::OK;
     }
 
@@ -802,6 +803,7 @@ err:
     if (state != STATE_LEADER) {
       reply->set_return_code(BLOCKSTORE_NOT_PRIM);
       reply->set_current_leader(current_leader_id);
+      reply->set_primary(current_leader_id);
       return Status::OK;
     }
 

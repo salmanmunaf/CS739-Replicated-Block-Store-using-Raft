@@ -929,9 +929,11 @@ out:
         reply->set_success(true);
       }
 
+      log_lock.lock();
       // if prevlogindex is more than our last index, or term on prev log index is not same
       if(prevLogIndex >= (int64_t)raft_log.size() || (prevLogIndex >= 0 && raft_log[prevLogIndex].term != prevLogTerm)) {
         reply->set_success(false);
+	log_lock.unlock();
         return Status::OK;
       }
 
@@ -954,12 +956,11 @@ out:
         newEntry.term = request->entries(i).term();
         newEntry.address = request->entries(i).address();
         memcpy(newEntry.data, request->entries(i).data().c_str(), request->entries(i).data().length());
-        log_lock.lock();
         persist_entry_to_log(newEntry);
         raft_log.push_back(newEntry);
         //commit_index = raft_log.size() - 1;
-        log_lock.unlock();
       }
+      log_lock.unlock();
 
       int64_t leaderCommitIdx = request->leader_commit();
       if (leaderCommitIdx > commit_index) { //comparison should be with commit index

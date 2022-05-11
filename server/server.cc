@@ -892,7 +892,7 @@ class RaftInterfaceImpl final : public RaftInterface::Service {
     int64_t ourLastLogIndex;
     int64_t ourLastLogTerm;
 
-    std::cout << "Received RequestVote from " << candidateId << " for term " << requestTerm << std::endl;
+    // std::cout << "Received RequestVote from " << candidateId << " for term " << requestTerm << std::endl;
 
     log_lock.lock();
     ourLastLogIndex = raft_log.size() - 1;

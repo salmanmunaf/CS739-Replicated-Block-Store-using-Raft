@@ -60,7 +60,8 @@ message Response {
   int32 error_code = 2;
   int64 current_leader = 3;
   int32 primary = 4;
-  bytes data = 5;
+  int32 log_size = 5;
+  bytes data = 6;
 }
 
 message EmptyPacket {}

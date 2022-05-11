@@ -57,6 +57,7 @@ using namespace std;
 #define TIMEOUT (7000)
 
 int primary;
+int log_size;
 class RBSClient {
   public:
     RBSClient(std::shared_ptr<Channel> channel)
@@ -91,6 +92,7 @@ class RBSClient {
         if(status.ok()) {
             if(response.return_code() == BLOCKSTORE_SUCCESS) {
                 std::cout << std::hash<std::string>{}(response.data()) << std::endl;
+                log_size = response.log_size();
                 return response.return_code();
             } else if (response.return_code() == BLOCKSTORE_NOT_PRIM) {
                 primary = response.primary();
@@ -116,6 +118,7 @@ class RBSClient {
         if(status.ok()) {
             int return_code = response.return_code();
             if(return_code == BLOCKSTORE_SUCCESS) {
+                log_size = response.log_size();
                 return response.return_code();
             } else if (return_code == BLOCKSTORE_NOT_PRIM) {
                 primary = response.primary();
@@ -152,7 +155,7 @@ int do_read(std::vector<RBSClient> &serverArr, off_t offset) {
     return primary;
 }
 
-int do_write(std::vector<RBSClient> &serverArr, off_t offset, std::string str) {
+int do_write(std::vector<RBSClient> &serverArr, off_t offset, std::string str, ostream& output) {
     bool first_try = true;
     int result = -1, retry = 1;
     int64_t request_start_time = cur_time();
@@ -164,7 +167,13 @@ int do_write(std::vector<RBSClient> &serverArr, off_t offset, std::string str) {
         first_try = false;
 
         RBSClient &rbsClient = serverArr[primary];
+        auto ts_write_start = std::chrono::steady_clock::now();
         result = rbsClient.Write(offset, std::string(str));
+        auto ts_write_end = std::chrono::steady_clock::now();
+
+        if (result == BLOCKSTORE_SUCCESS) {
+          output << "log size: " << log_size <<   ", duration: " << std::chrono::duration_cast<std::chrono::milliseconds>(ts_write_end - ts_write_start).count() << std::endl;
+        }
 
         std::cout << primary << ": " << result << std::endl;
     }
@@ -183,6 +192,14 @@ void process_server_file(std::vector<std::string> &list, std::string filename) {
 
     file.close();
   }
+}
+
+void getRandomText(std::string &s, int size) {
+    int num_bytes_written = 0;
+    while (num_bytes_written < size) {
+        s.push_back((rand() % 26) + 'a');
+        num_bytes_written++;
+    }
 }
 
 int main(int argc, char** argv) {
@@ -204,46 +221,70 @@ int main(int argc, char** argv) {
   primary=1;
 
   // one-of read
-  if (argc == 3) {
-    offset = std::stoull(std::string(argv[3]));
-    do_read(serverArr, offset);
-    return 0;
+  // if (argc == 3) {
+  //   offset = std::stoull(std::string(argv[3]));
+  //   do_read(serverArr, offset);
+  //   return 0;
+  // }
+  // // one-of write
+  // if (argc == 4) {
+  //   offset = std::stoull(std::string(argv[3]));
+  //   str = std::string(argv[4]);
+  //   str.resize(4096, ' ');
+  //   do_write(serverArr, offset, str);
+  //   return 0;
+  // }
+
+  ofstream writeLogFile;
+  writeLogFile.open("writeLatency.txt");
+  size_t string_size = 4096;
+  srand(time(NULL));
+  getRandomText(str, string_size);
+  str.resize(string_size, ' ');
+//   std::cout << "Random string: " << str << std::endl;
+
+  unsigned int num_iterations = 1000;
+  auto sum = 0;
+  offset = 0;
+  for (int i = 0; i < num_iterations; i++) {
+    // auto ts_aligned_write_start = std::chrono::steady_clock::now();
+    primary = do_write(serverArr, offset, str, writeLogFile);
+    // auto ts_aligned_write_end = std::chrono::steady_clock::now();
+    // std::cout << "Aligned write (offset = " << offset << ") latency time in milliseconds: "
+	// 			  << std::chrono::duration_cast<std::chrono::milliseconds>(ts_aligned_write_end - ts_aligned_write_start).count()
+	// 			  << " ms" << std::endl;
+    // sum += std::chrono::duration_cast<std::chrono::milliseconds>(ts_aligned_write_end - ts_aligned_write_start).count();
+    offset += BLOCK_SIZE;
   }
-  // one-of write
-  if (argc == 4) {
-    offset = std::stoull(std::string(argv[3]));
-    str = std::string(argv[4]);
-    str.resize(4096, ' ');
-    do_write(serverArr, offset, str);
-    return 0;
-  }
 
-  std::cout << "Enter operation (1 = read, 2 = write, 0 = exit): ";
-  std::cin >> user_input;    // input = 1 for read, 2 for write, 0 to exit
-  while(user_input != 0) {
+  writeLogFile.close();
 
-    std::cout << "Enter offset: " << std::endl;
-    std::cin >> offset;
+  // std::cout << "Enter operation (1 = read, 2 = write, 0 = exit): ";
+  // std::cin >> user_input;    // input = 1 for read, 2 for write, 0 to exit
+  // while(user_input != 0) {
 
-    if(user_input == 1) {
-        primary = do_read(serverArr, offset);
-    } else {
+  //   std::cout << "Enter offset: " << std::endl;
+  //   std::cin >> offset;
+
+  //   if(user_input == 1) {
+  //       primary = do_read(serverArr, offset);
+  //   } else {
         
-        std::cout << "Enter data to write: " << std::endl;
-        std::cin >> str;
+  //       std::cout << "Enter data to write: " << std::endl;
+  //       std::cin >> str;
 
-        // char* str = (char *) malloc(BLOCK_SIZE/sizeof(char));
-        // strcpy(str, data);
+  //       // char* str = (char *) malloc(BLOCK_SIZE/sizeof(char));
+  //       // strcpy(str, data);
 
-        str.resize(4096, ' ');
-        std::cout << "Hash of data to write: " << std::hash<std::string>{}(str) << std::endl;
+  //       str.resize(4096, ' ');
+  //       std::cout << "Hash of data to write: " << std::hash<std::string>{}(str) << std::endl;
 
-        primary = do_write(serverArr, offset, str);
-    }
+  //       primary = do_write(serverArr, offset, str);
+  //   }
 
-    std::cout << "Enter operation: ";
-    std::cin >> user_input;    // input = 1 for read, 2 for write, 0 to exit
-  }
+  //   std::cout << "Enter operation: ";
+  //   std::cin >> user_input;    // input = 1 for read, 2 for write, 0 to exit
+  // }
 
   return 0;
 }

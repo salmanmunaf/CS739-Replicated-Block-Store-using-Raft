@@ -544,6 +544,7 @@ class RBSImpl final : public RBS::Service {
       goto err;
     }
 
+    reply->set_log_size(raft_log.size());
     reply->set_data(std::string(buf, BLOCK_SIZE));
     reply->set_return_code(BLOCKSTORE_SUCCESS);
     reply->set_error_code(0);
@@ -600,6 +601,7 @@ err:
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
+    reply->set_log_size(raft_log.size());
     reply->set_return_code(BLOCKSTORE_SUCCESS);
     return Status::OK;
   }

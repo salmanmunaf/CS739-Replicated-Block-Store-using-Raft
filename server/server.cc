@@ -955,7 +955,7 @@ out:
       for (int i = 0; i < request->entries().size(); i++) { //confirm syntax???
         newEntry.term = request->entries(i).term();
         newEntry.address = request->entries(i).address();
-        memcpy(newEntry.data, request->entries(i).data().c_str(), request->entries(i).data().length());
+        memcpy(newEntry.data, request->entries(i).data().c_str(), BLOCK_SIZE);
         persist_entry_to_log(newEntry);
         raft_log.push_back(newEntry);
         //commit_index = raft_log.size() - 1;

@@ -111,6 +111,7 @@ int read_block_data(std::string block_file, char *buf, off_t offset) {
 
   ret = pread(fd, buf, BLOCK_SIZE, offset);
   if (ret < 0) {
+    close(fd);
     goto err;
   }
 
@@ -135,10 +136,12 @@ int write_block_data(std::string block_file, const char *buf, off_t offset) {
 
   ret = pwrite(fd, buf, BLOCK_SIZE, offset);
   if (ret < 0) {
+    close(fd);
     goto err;
   }
 
   if (fsync(fd) != 0) {
+    close(fd);
     goto err;
   }
 
@@ -179,11 +182,13 @@ int write_undo_file(std::string undo_path, off_t address) {
 
   ret = write(fd, undo_buf, undo_write_size);
   if (ret < 0) {
+    close(fd);
     goto err;
   }
 
   ret = fsync(fd);
   if (ret < 0) {
+    close(fd);
     goto err;
   }
   ret = close(fd);
@@ -260,6 +265,7 @@ int persist_entry_to_log(LogEntry &entry) {
     if (undo_fd < 0) {
         goto err;
     }
+    close(undo_fd);
 
     // Actually write the entry to the file
     // Start with the term
@@ -285,12 +291,11 @@ int persist_entry_to_log(LogEntry &entry) {
     // We're done, so delete the undo file
     unlink(truncate_file.c_str());
 
+    close(fd);
     return 0;
 err:
     if (fd > 0)
         close(fd);
-    if (undo_fd > 0)
-        close(undo_fd);
     printf("%s : Failed to persist entry to log: %s\n", __func__, strerror(errno));
     return -1;
 }

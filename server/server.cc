@@ -751,7 +751,7 @@ class RBSImpl final : public RBS::Service {
     if (state != STATE_LEADER) {
       reply->set_return_code(BLOCKSTORE_NOT_PRIM);
       reply->set_current_leader(current_leader_id);
-      reply->set_primary(current_leader_id);
+      // reply->set_primary(current_leader_id);
       return Status::OK;
     }
 
@@ -803,7 +803,7 @@ err:
     if (state != STATE_LEADER) {
       reply->set_return_code(BLOCKSTORE_NOT_PRIM);
       reply->set_current_leader(current_leader_id);
-      reply->set_primary(current_leader_id);
+      // reply->set_primary(current_leader_id);
       return Status::OK;
     }
 
@@ -1061,7 +1061,7 @@ void handle_heartbeats(std::vector<std::string> other_servers) {
       servers.Heartbeat();
       // TODO: We will want to lower this sleep time for performance, but for debugging
       // this helps with the logging output
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
     } else {
       // If we haven't heard from the leader since the timeout time,
       // let's try to become the leader

@@ -27,6 +27,7 @@
 #include <thread>
 #include <fstream>
 #include <algorithm>
+#include <random>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -55,6 +56,10 @@ using namespace cs739;
 #define MAX_NUM_BLOCKS (1000)
 #define KB (1024)
 #define BLOCK_SIZE (4*KB)
+//Entry size = sizeof(term + address + block data)
+#define ENTRY_SIZE (8 + 8 + BLOCK_SIZE)
+//Log intro size = sizeof(cur_term + voted_for)
+#define LOG_INTRO_SIZE (8 + 8)
 #define HAVENT_VOTED (-1)
 
 struct LogEntry {
@@ -69,6 +74,8 @@ std::mutex log_lock; //lock to ensure atomicity in queue operations
 //and who we voted for
 std::mutex vote_lock;
 const std::string FILE_PATH = "blockstore.log";
+// This file stores the current term, voted for, and then the entries
+const std::string RAFT_LOG_FILE = "raft.log";
 
 enum server_state {
     STATE_LEADER,
@@ -199,6 +206,95 @@ err:
   return -1;
 }
 
+int64_t get_int64_from_buf(char *buf) {
+    uint64_t num = 0;
+    num |= (uint64_t) buf[7];
+    num |= (uint64_t) buf[6] << 8;
+    num |= (uint64_t) buf[5] << 16;
+    num |= (uint64_t) buf[4] << 24;
+    num |= (uint64_t) buf[3] << 32;
+    num |= (uint64_t) buf[2] << 40;
+    num |= (uint64_t) buf[1] << 48;
+    num |= (uint64_t) buf[0] << 56;
+
+    return (int64_t)num;
+}
+
+void put_int64_to_buf(char *buf, int64_t n) {
+    // Convert the input to be unsigned to prevent any sign extension shenanigans
+    uint64_t num = (uint64_t)n;
+    buf[7] = num & 0xFF;
+    buf[6] = (num >> 8) & 0xFF;
+    buf[5] = (num >> 16) & 0xFF;
+    buf[4] = (num >> 24) & 0xFF;
+    buf[3] = (num >> 32) & 0xFF;
+    buf[2] = (num >> 40) & 0xFF;
+    buf[1] = (num >> 48) & 0xFF;
+    buf[0] = (num >> 56) & 0xFF;
+}
+
+// Append entry to the end of the raft log file
+int persist_entry_to_log(LogEntry &entry) {
+    std::string truncate_file;
+    char num_buf[8];
+    off_t write_offset;
+    int fd = 0;
+    int undo_fd = 0;
+    int ret;
+
+    fd = open(RAFT_LOG_FILE.c_str(), O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+    if (fd < 0) {
+        goto err;
+    }
+
+    // Go to write to the end of the log and get the offset
+    write_offset = lseek(fd, 0, SEEK_END);
+    if (write_offset == -1) {
+        goto err;
+    }
+
+    // Create the file that indicates where the raft log should be truncated
+    // to on failure recovery
+    truncate_file = std::to_string(write_offset) + ".rlog";
+    undo_fd = creat(truncate_file.c_str(), S_IRUSR | S_IWUSR);
+    if (undo_fd < 0) {
+        goto err;
+    }
+
+    // Actually write the entry to the file
+    // Start with the term
+    put_int64_to_buf(num_buf, entry.term);
+    ret = write(fd, num_buf, 8);
+    if (ret < 0) {
+        goto err;
+    }
+
+    // Then the address of the entry
+    put_int64_to_buf(num_buf, entry.address);
+    ret = write(fd, num_buf, 8);
+    if (ret < 0) {
+        goto err;
+    }
+
+    // and finally, the actual data
+    ret = write(fd, entry.data, BLOCK_SIZE);
+    if (ret < 0) {
+        goto err;
+    }
+
+    // We're done, so delete the undo file
+    unlink(truncate_file.c_str());
+
+    return 0;
+err:
+    if (fd > 0)
+        close(fd);
+    if (undo_fd > 0)
+        close(undo_fd);
+    printf("%s : Failed to persist entry to log: %s\n", __func__, strerror(errno));
+    return -1;
+}
+
 int64_t find_address_from_path(std::string undo_path) {
   // copy the path because the delimiting code will modify the string
   std::string s(undo_path);
@@ -270,6 +366,107 @@ err:
   return -1;
 }
 
+void fix_raft_log(std::string path) {
+    off_t address;
+
+    address = find_address_from_path(path);
+    truncate(RAFT_LOG_FILE.c_str(), address);
+
+    unlink(path.c_str());
+}
+
+// Updates curTerm and voted_for as well as their persistent counterpart
+// Requires the vote_lock
+void update_term_and_voted_for(int64_t new_term, int64_t new_voted_for) {
+    char buf[8];
+    int fd;
+    int ret;
+
+    fd = open(RAFT_LOG_FILE.c_str(), O_WRONLY);
+    if (fd < 0) {
+        printf("%s: %s\n", __func__, strerror(errno));
+        return;
+    }
+
+    curTerm = new_term;
+    put_int64_to_buf(buf, curTerm);
+    write(fd, buf, 8);
+
+    voted_for = new_voted_for;
+    put_int64_to_buf(buf, voted_for);
+    write(fd, buf, 8);
+
+    close(fd);
+}
+
+void create_empty_raft_log() {
+    char buf[8];
+    int fd;
+
+    fd = open(RAFT_LOG_FILE.c_str(), O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+    if (fd < 0) {
+        printf("%s: %s\n", __func__, strerror(errno));
+        return;
+    }
+
+    // The first part of the raft.log file is the current term, which we will initialize to 0
+    curTerm = 0;
+    put_int64_to_buf(buf, curTerm);
+    write(fd, buf, 8);
+
+    // The second part of the file is who we voted for, which we will initialize to HAVENT_VOTED
+    voted_for = HAVENT_VOTED;
+    put_int64_to_buf(buf, HAVENT_VOTED);
+    write(fd, buf, 8);
+
+    close(fd);
+}
+
+void read_raft_log() {
+    char buf[ENTRY_SIZE];
+    int fd;
+    int ret;
+    int count = 0;
+
+    fd = open(RAFT_LOG_FILE.c_str(), O_RDONLY);
+    if (fd < 0) {
+        create_empty_raft_log();
+        return;
+    }
+
+    // Read in the curren term
+    ret = read(fd, buf, 8);
+    if (ret < 0)
+        goto err;
+    curTerm = get_int64_from_buf(buf);
+
+    // Read in who we voted for this term
+    ret = read(fd, buf, 8);
+    if (ret < 0)
+        goto err;
+    voted_for = get_int64_from_buf(buf);
+
+    while (read(fd, buf, ENTRY_SIZE) > 0) {
+        LogEntry entry;
+
+        entry.term = get_int64_from_buf(buf);
+        entry.address = get_int64_from_buf(&buf[8]);
+        memcpy(entry.data, &buf[16], BLOCK_SIZE);
+
+        // Don't need to grab the log lock because we haven't started any threads
+        raft_log.push_back(entry);
+        count++;
+    }
+
+    close(fd);
+
+    printf("Read %d entries from the persistent log!\n", count);
+    return;
+err:
+    close(fd);
+    printf("%s Error reading the persistent log!: %s", __func__, strerror(errno));
+}
+
 int do_atomic_write(int64_t address, std::string data) {
   std::string undo_path = FILE_PATH + "." + std::to_string(address) + ".undo";
   const char* write_buf = data.c_str();
@@ -310,12 +507,27 @@ err:
 void apply_entries(int64_t first, int64_t last) {
   for (int i = first; i <= last; i++) {
     LogEntry entry;
+    int64_t address;
+    int64_t block;
 
     log_lock.lock();
     entry = raft_log[i];
     log_lock.unlock();
 
+    address = entry.address;
+    block = address / BLOCK_SIZE;
+
+    lockArray[block].lock();
+    if (!is_block_aligned(address)) {
+        lockArray[block + 1].lock();
+    }
+
     do_atomic_write(entry.address, std::string(entry.data, BLOCK_SIZE));
+
+    if (!is_block_aligned(address)) {
+        lockArray[block + 1].unlock();
+    }
+    lockArray[block].unlock();
   }
 }
 
@@ -325,34 +537,43 @@ class RaftInterfaceClient {
     std::vector<std::unique_ptr<RaftInterface::Stub>> stubs;
 
     static void RequestVote(std::unique_ptr<RaftInterface::Stub> &stub,
-        std::atomic<uint8_t> &yes_votes, std::atomic<uint8_t> &no_votes,
+        std::shared_ptr<std::atomic<uint8_t>> yes_votes,
+        std::shared_ptr<std::atomic<uint8_t>> no_votes,
         int64_t term, int callingServerId)
     {
       ClientContext context;
       RequestVoteRequest request;
       RequestVoteResponse response;
+      int64_t last_log_index = 0;
 
       // Fill in the data
       request.set_term(term);
       request.set_candidate_id(server_id);
-      // TODO: Replace these placeholders with real values
-      request.set_last_log_index(0);
-      request.set_last_log_term(0);
+
+      // Get the last log index and term
+      log_lock.lock();
+      last_log_index = raft_log.size() - 1;
+      request.set_last_log_index(last_log_index);
+      if (last_log_index >= 0)
+        request.set_last_log_term(raft_log[last_log_index].term);
+      else
+        request.set_last_log_term(0);
+      log_lock.unlock();
 
       Status status = stub->RequestVote(&context, request, &response);
 
       if (status.ok()) {
         if (response.vote_granted()) {
           std::cout << callingServerId << ": Yes vote\n";
-          yes_votes.fetch_add(1);
+          (*yes_votes).fetch_add(1);
         } else {
           std::cout << callingServerId << ": No vote\n";
-          no_votes.fetch_add(1);
+          (*no_votes).fetch_add(1);
         }
       } else {
         std::cout << callingServerId << ": Comm error\n";
         // For now, assume network failure stuff is a no vote
-        no_votes.fetch_add(1);
+        (*no_votes).fetch_add(1);
       }
     }
 
@@ -371,7 +592,6 @@ class RaftInterfaceClient {
 
     static void AppendEntries(std::unique_ptr<RaftInterface::Stub> &stub, int64_t serverIdx, int64_t term)
     {
-      ClientContext context;
       AppendEntriesRequest request;
       AppendEntriesResponse response;
       Entry* entry;
@@ -386,6 +606,10 @@ class RaftInterfaceClient {
       request.set_leader_commit(commit_index);
 
       while (!success) {
+        // Create ClientContext as unique_ptr here because reusing a context
+        // when retrying an RPC can cause gRPC to trash
+        auto context = std::make_unique<ClientContext>();;
+
         log_lock.lock();
         // This represents the last index we are sending to the follower
         update_index = raft_log.size() - 1;
@@ -407,7 +631,7 @@ class RaftInterfaceClient {
 
         log_lock.unlock();
 
-        stub->AppendEntries(&context, request, &response);
+        stub->AppendEntries(context.get(), request, &response);
         success = response.success();
         if (!success) {
           std::cout << "Unsuccessful response received from server: " << serverIdx << " for term: " << term << std::endl;
@@ -439,15 +663,15 @@ class RaftInterfaceClient {
 
     int StartElection() {
       // Start with one yes vote (we are voting for ourself)
-      std::atomic<uint8_t> yes_votes(1);
-      std::atomic<uint8_t> no_votes(0);
+      auto yes_votes = std::make_shared<std::atomic<uint8_t>>(1);
+      auto no_votes = std::make_shared<std::atomic<uint8_t>>(0);
       int64_t majority = (num_servers / 2) + 1;
       int64_t term;
 
       // Increment the term
       vote_lock.lock();
-      term = curTerm.fetch_add(1) + 1;
-      voted_for = server_id;
+      term = curTerm + 1;
+      update_term_and_voted_for(term, server_id);
       vote_lock.unlock();
       std::cout << "Starting term: " << term << "\n";
 
@@ -459,18 +683,18 @@ class RaftInterfaceClient {
       }
 
       // Wait until we have a majority of votes in some direction
-      while (yes_votes < majority && no_votes < majority) {
+      while (*yes_votes < majority && *no_votes < majority) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
       }
 
       std::cout << "Hello, received vote responses from all servers\n";
 
-      if (yes_votes >= majority) {
+      if (*yes_votes >= majority) {
         state = STATE_LEADER;
         std::cout << "Elected leader" << std::endl;
         for (int i = 0; i < stubs.size(); i++) {
           nextIndex[i] = raft_log.size();
-          matchIndex[i] = 0;
+          matchIndex[i] = -1;
         }
         return 1;
       } else {
@@ -582,7 +806,8 @@ err:
 
     // Add the new entry to the log
     log_lock.lock();
-    
+   
+    persist_entry_to_log(log_entry);
     raft_log.push_back(log_entry);
     entry_index = raft_log.size() - 1;
 
@@ -637,8 +862,7 @@ class RaftInterfaceImpl final : public RaftInterface::Service {
 
     if (requestTerm > curTerm) {
         state = STATE_FOLLOWER;
-        curTerm = requestTerm;
-        voted_for = HAVENT_VOTED;
+        update_term_and_voted_for(requestTerm, HAVENT_VOTED);
     } else if (requestTerm < curTerm) {
         reply->set_term(curTerm);
         reply->set_vote_granted(false);
@@ -654,7 +878,7 @@ class RaftInterfaceImpl final : public RaftInterface::Service {
     } else if (voted_for != HAVENT_VOTED) {
         reply->set_vote_granted(false);
     } else {
-        voted_for = candidateId;
+        update_term_and_voted_for(curTerm, candidateId);
         reply->set_vote_granted(true);
 
         last_comm_time = cur_time();
@@ -680,8 +904,7 @@ out:
 
       if (requestTerm > curTerm) {
         vote_lock.lock();
-        curTerm = requestTerm;
-        voted_for = HAVENT_VOTED;
+        update_term_and_voted_for(requestTerm, HAVENT_VOTED);
         state = STATE_FOLLOWER;
         current_leader_id = leaderId;
         vote_lock.unlock();
@@ -715,8 +938,10 @@ out:
       }
 
       // deleting entries after index with same term
-      if(prevLogIndex+1 < raft_log.size())
+      if(prevLogIndex+1 < raft_log.size()) {
+        truncate(RAFT_LOG_FILE.c_str(), LOG_INTRO_SIZE + ((prevLogIndex + 1) * ENTRY_SIZE));
         raft_log.erase(raft_log.begin()+prevLogIndex+1, raft_log.end());
+      }
 
       // if(request->entries().size() > 0) {
       //   int64_t entryTerm = request->entries(0).term();
@@ -732,6 +957,7 @@ out:
         newEntry.address = request->entries(i).address();
         memcpy(newEntry.data, request->entries(i).data().c_str(), request->entries(i).data().length());
         log_lock.lock();
+        persist_entry_to_log(newEntry);
         raft_log.push_back(newEntry);
         //commit_index = raft_log.size() - 1;
         log_lock.unlock();
@@ -815,7 +1041,10 @@ sleep:
 
 void handle_heartbeats(std::vector<std::string> other_servers) {
   RaftInterfaceClient servers(other_servers);
-  const int ELECTION_TIMEOUT = 5000;
+  std::random_device dev;
+  std::mt19937 rng(dev());
+  std::uniform_int_distribution<std::mt19937::result_type> dist(0, 100);
+  const int ELECTION_TIMEOUT = 5000 + dist(rng);
   int ret;
 
   while (true) {
@@ -901,7 +1130,13 @@ int main(int argc, char** argv) {
     if (entry->d_type == DT_REG && strcmp(&filename[extension_index], ".undo") == 0) {
       recover_undo_file(std::string(filename));
     }
+    if (entry->d_type == DT_REG && strcmp(&filename[extension_index], ".rlog") == 0) {
+      fix_raft_log(std::string(filename));
+    }
   }
+
+  // Read the raft log file and populate our in memory raft log
+  read_raft_log();
 
   // On startup, give the primary an extra few seconds to send a heartbeat
   last_comm_time = cur_time() + 10000;

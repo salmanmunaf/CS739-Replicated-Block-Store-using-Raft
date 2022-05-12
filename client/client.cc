@@ -102,12 +102,13 @@ class RBSClient {
         }
     }
 
-    int Write(off_t offset, const std::string& data) {
+    int Write(off_t offset, const std::string& data, int to_exit) {
         ClientContext context;
 
         WriteRequest request;
         request.set_address(offset);
         request.set_data(data);
+        request.set_to_exit(to_exit);
 
         Response response;
 
@@ -173,7 +174,7 @@ void do_read(std::vector<RBSClient> &serverArr, off_t offset) {
     }
 }
 
-void do_write(std::vector<RBSClient> &serverArr, off_t offset, std::string str) {
+void do_write(std::vector<RBSClient> &serverArr, off_t offset, std::string str, int to_exit) {
     bool first_try = true;
     int result = -1, retry = 1;
     int64_t request_start_time = cur_time();
@@ -185,7 +186,7 @@ void do_write(std::vector<RBSClient> &serverArr, off_t offset, std::string str) 
         first_try = false;
 
         RBSClient &rbsClient = serverArr[primary];
-        result = rbsClient.Write(offset, std::string(str));
+        result = rbsClient.Write(offset, std::string(str), to_exit);
 
         // If we couldn't communicate with the given server, increment the primary
         if (result == -1) {
@@ -243,6 +244,7 @@ int main(int argc, char** argv) {
     return 0;
   }
 
+  int to_exit;
   std::cout << "Enter operation (1 = read, 2 = write, 3 = display log, 0 = exit): ";
   std::cin >> user_input;    // input = 1 for read, 2 for write, 0 to exit
   while(user_input != 0) {
@@ -258,13 +260,16 @@ int main(int argc, char** argv) {
         std::cout << "Enter data to write: " << std::endl;
         std::cin >> str;
 
+        std::cout << "Enter if exit after write: " << std::endl;
+        std::cin >> to_exit;
+
         // char* str = (char *) malloc(BLOCK_SIZE/sizeof(char));
         // strcpy(str, data);
 
         str.resize(4096, ' ');
         std::cout << "Hash of data to write: " << std::hash<std::string>{}(str) << std::endl;
 
-        do_write(serverArr, offset, str);
+        do_write(serverArr, offset, str, to_exit);
     } else {
       std::cout<<"Enter server id: "<<std::endl;
       int server_id;

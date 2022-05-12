@@ -834,6 +834,11 @@ err:
 
     displayLog();
 
+    if(request->to_exit() == 1) {
+      std::<<"Exiting before replicating log"<<std::endl;
+      exit(0);
+    }
+
     // if(request->to_exit() == 1) {
     //   exit(0);
     // }

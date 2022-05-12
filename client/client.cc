@@ -149,7 +149,7 @@ class RBSClient {
     std::unique_ptr<RBS::Stub> stub_;
 };
 
-int do_read(std::vector<RBSClient> &serverArr, off_t offset) {
+void do_read(std::vector<RBSClient> &serverArr, off_t offset) {
     bool first_try = true;
     int result = -1, retry = 1;
     int64_t request_start_time = cur_time();
@@ -171,11 +171,9 @@ int do_read(std::vector<RBSClient> &serverArr, off_t offset) {
     
         std::cout << primary << ": " << result << std::endl;
     }
-    
-    return primary;
 }
 
-int do_write(std::vector<RBSClient> &serverArr, off_t offset, std::string str) {
+void do_write(std::vector<RBSClient> &serverArr, off_t offset, std::string str) {
     bool first_try = true;
     int result = -1, retry = 1;
     int64_t request_start_time = cur_time();
@@ -197,7 +195,6 @@ int do_write(std::vector<RBSClient> &serverArr, off_t offset, std::string str) {
         std::cout << primary << ": " << result << std::endl;
     }
 
-    return primary;
 }
 
 void process_server_file(std::vector<std::string> &list, std::string filename) {
@@ -255,7 +252,7 @@ int main(int argc, char** argv) {
     }
 
     if(user_input == 1) {
-        primary = do_read(serverArr, offset);
+        do_read(serverArr, offset);
     } else if (user_input == 2){
         
         std::cout << "Enter data to write: " << std::endl;
@@ -267,7 +264,7 @@ int main(int argc, char** argv) {
         str.resize(4096, ' ');
         std::cout << "Hash of data to write: " << std::hash<std::string>{}(str) << std::endl;
 
-        primary = do_write(serverArr, offset, str);
+        do_write(serverArr, offset, str);
     } else {
       std::cout<<"Enter server id: "<<std::endl;
       int server_id;

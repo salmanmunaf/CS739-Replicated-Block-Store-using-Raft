@@ -953,6 +953,7 @@ out:
         state = STATE_FOLLOWER;
         current_leader_id = leaderId;
         vote_lock.unlock();
+        std::cout<<"Leader updated to: "<<current_leader_id<<std::endl;
         //reply->set_success(false);
         //reply->set_term(curTerm);
       }
@@ -971,6 +972,8 @@ out:
         // vote_lock.unlock();
 
         state = STATE_FOLLOWER;
+        current_leader_id = leaderId;
+        std::cout<<"Leader updated to: "<<current_leader_id<<std::endl;
 
         reply->set_term(curTerm);
         reply->set_success(true);

@@ -58,7 +58,7 @@ message ReadRequest {
 message WriteRequest {
   int64 address = 1;
   bytes data = 2;
-  int to_exit = 3;
+  int64 to_exit = 3;
 }
 
 message Response {

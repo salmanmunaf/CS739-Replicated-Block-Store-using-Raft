@@ -272,7 +272,7 @@ int main(int argc, char** argv) {
       std::cout<<"Enter server id: "<<std::endl;
       int server_id;
       std::cin>>server_id;
-      RBSClient &rbsClient = serverArr[primary];
+      RBSClient &rbsClient = serverArr[server_id];
       int result = rbsClient.DisplayLog(server_id);
       std::cout << "Server displayed log"<<std::endl;
     }

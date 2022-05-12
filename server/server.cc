@@ -654,7 +654,7 @@ class RaftInterfaceClient {
         stub->AppendEntries(context.get(), request, &response);
         success = response.success();
         if (!success) {
-          std::cout << "Unsuccessful response received from server: " << serverIdx << " for term: " << term << std::endl;
+          // std::cout << "Unsuccessful response received from server: " << serverIdx << " for term: " << term << std::endl;
 
           // If the write fails when we are trying to write the first index,
           // it is likely that the server is down, so stop trying for now

@@ -240,7 +240,7 @@ int main(int argc, char** argv) {
     offset = std::stoull(std::string(argv[3]));
     str = std::string(argv[4]);
     str.resize(4096, ' ');
-    do_write(serverArr, offset, str);
+    do_write(serverArr, offset, str, 0);
     return 0;
   }
 

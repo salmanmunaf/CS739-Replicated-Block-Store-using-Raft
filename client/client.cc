@@ -249,9 +249,10 @@ int main(int argc, char** argv) {
   std::cout << "Enter operation (1 = read, 2 = write, 3 = display log, 0 = exit): ";
   std::cin >> user_input;    // input = 1 for read, 2 for write, 0 to exit
   while(user_input != 0) {
-
-    std::cout << "Enter offset: " << std::endl;
-    std::cin >> offset;
+    if(user_input != 3) {
+      std::cout << "Enter offset: " << std::endl;
+      std::cin >> offset;
+    }
 
     if(user_input == 1) {
         primary = do_read(serverArr, offset);

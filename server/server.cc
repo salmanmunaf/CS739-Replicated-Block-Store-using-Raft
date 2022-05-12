@@ -942,8 +942,8 @@ out:
       int64_t prevLogIndex = request->prev_log_index();
       int64_t prevLogTerm = request->prev_log_term();
 
-      std::cout << "Recieved Append Entries from " <<  leaderId << " for term " << requestTerm <<
-        ", prevLogIndex: " << prevLogIndex << " and prevLogTerm: " << prevLogTerm << std::endl;
+      // std::cout << "Recieved Append Entries from " <<  leaderId << " for term " << requestTerm <<
+      //   ", prevLogIndex: " << prevLogIndex << " and prevLogTerm: " << prevLogTerm << std::endl;
 
       last_comm_time = cur_time();
 

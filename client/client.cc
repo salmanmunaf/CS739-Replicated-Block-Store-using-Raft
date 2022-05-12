@@ -181,6 +181,7 @@ void do_write(std::vector<RBSClient> &serverArr, off_t offset, std::string str, 
 
     while (result != BLOCKSTORE_SUCCESS && cur_time() - request_start_time < TIMEOUT) {
         if (!first_try) {
+            to_exit = 0;
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
         }
         first_try = false;

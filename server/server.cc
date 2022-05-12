@@ -730,7 +730,7 @@ class RaftInterfaceClient {
 
       term = curTerm;
 
-      std::cout << "Sending Append Entries for term: " << term << std::endl;
+      // std::cout << "Sending Append Entries for term: " << term << std::endl;
 
       // Spawn threads to do the heartbeat
       for (int i = 0; i < stubs.size(); i++) {

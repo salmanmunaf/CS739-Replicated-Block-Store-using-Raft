@@ -95,7 +95,8 @@ class RBSClient {
                 log_size = response.log_size();
                 return response.return_code();
             } else if (response.return_code() == BLOCKSTORE_NOT_PRIM) {
-                primary = response.primary();
+                primary = response.current_leader();
+		std::cout << "The primary in read is " << primary << std::endl;
                 return response.return_code();
             }
             return response.error_code();
@@ -121,7 +122,8 @@ class RBSClient {
                 log_size = response.log_size();
                 return response.return_code();
             } else if (return_code == BLOCKSTORE_NOT_PRIM) {
-                primary = response.primary();
+                primary = response.current_leader();
+		std::cout << "The primary is " << primary << std::endl;
                 return response.return_code();
             }
             return response.error_code();
@@ -134,7 +136,7 @@ class RBSClient {
     std::unique_ptr<RBS::Stub> stub_;
 };
 
-int do_read(std::vector<RBSClient> &serverArr, off_t offset, ostream& output) {
+void do_read(std::vector<RBSClient> &serverArr, off_t offset, ostream& output) {
     bool first_try = true;
     int result = -1, retry = 1;
     int64_t request_start_time = cur_time();
@@ -160,13 +162,15 @@ int do_read(std::vector<RBSClient> &serverArr, off_t offset, ostream& output) {
             primary = (primary + 1) % serverArr.size();
         }
     
+	std::cout << "The primary is do read " << primary << std::endl;
         std::cout << primary << ": " << result << std::endl;
     }
     
-    return primary;
+    //return primary;
+    return;
 }
 
-int do_write(std::vector<RBSClient> &serverArr, off_t offset, std::string str, ostream& output) {
+void do_write(std::vector<RBSClient> &serverArr, off_t offset, std::string str, ostream& output) {
     bool first_try = true;
     int result = -1, retry = 1;
     int64_t request_start_time = cur_time();
@@ -191,10 +195,12 @@ int do_write(std::vector<RBSClient> &serverArr, off_t offset, std::string str, o
             primary = (primary + 1) % serverArr.size();
         }
 
+	std::cout << "The primary is do write " << primary << std::endl;
         std::cout << primary << ": " << result << std::endl;
     }
 
-    return primary;
+    //return primary;
+    return;
 }
 
 void process_server_file(std::vector<std::string> &list, std::string filename) {
@@ -245,11 +251,12 @@ int main(int argc, char** argv) {
   getRandomText(str, string_size);
   str.resize(string_size, ' ');
 
-  unsigned int num_iterations = 1000;
+  unsigned int num_iterations = 200;
   offset = 0;
+  int result = 0;
   for (int i = 0; i < num_iterations; i++) {
-    primary = do_write(serverArr, offset, str, writeLogFile);
-    primary = do_read(serverArr, offset, readLogFile);
+    do_write(serverArr, offset, str, writeLogFile);
+    do_read(serverArr, offset, readLogFile);
     offset += BLOCK_SIZE;
   }
   writeLogFile.close();

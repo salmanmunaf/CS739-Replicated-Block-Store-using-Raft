@@ -23,4 +23,17 @@ servers_file: A file of ip:port pairs for the other servers in the cluster. For 
 127.0.0.1:10002
 127.0.0.1:10003
 
-Them, follow the prompt instructions to send a request
+Then, follow the prompt instructions to send a request
+
+Code locations:
+Leader Election:
+    Requesting a vote: server/server.cc 544-583, 669-710
+    Receiving a request vote: server/server.cc 844-893
+Handling write requests:
+    Leader sending logs to followers: server/server.cc 598-656 712-735
+    Follower receiving entries: server/server.cc 895-983
+    Commiting requests: server/server.cc 1009-1044
+Persistence:
+    creating data undo file: server/server.cc 475-510
+    creating raft log undo file: server/server.cc 242-301
+    recovering undo file: server/server.cc 318-372 374-381 1123-1140

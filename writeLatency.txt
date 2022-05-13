@@ -1,200 +1,200 @@
-log size: 1, duration: 56898
-log size: 2, duration: 101405
-log size: 3, duration: 102198
-log size: 4, duration: 101168
-log size: 5, duration: 103532
-log size: 6, duration: 101291
-log size: 7, duration: 102344
-log size: 8, duration: 101033
-log size: 9, duration: 102476
-log size: 10, duration: 102466
-log size: 11, duration: 102364
-log size: 12, duration: 101342
-log size: 13, duration: 103357
-log size: 14, duration: 101430
-log size: 15, duration: 101326
-log size: 16, duration: 103879
-log size: 17, duration: 101548
-log size: 18, duration: 101124
-log size: 19, duration: 103510
-log size: 20, duration: 102064
-log size: 21, duration: 102199
-log size: 22, duration: 101169
-log size: 23, duration: 103614
-log size: 24, duration: 101210
-log size: 25, duration: 101328
-log size: 26, duration: 102189
-log size: 27, duration: 102160
-log size: 28, duration: 101508
-log size: 29, duration: 102644
-log size: 30, duration: 102543
-log size: 31, duration: 101548
-log size: 32, duration: 102630
-log size: 33, duration: 101877
-log size: 34, duration: 102587
-log size: 35, duration: 102656
-log size: 36, duration: 101684
-log size: 37, duration: 102587
-log size: 38, duration: 101604
-log size: 39, duration: 102656
-log size: 40, duration: 101535
-log size: 41, duration: 102363
-log size: 42, duration: 103665
-log size: 43, duration: 100575
-log size: 44, duration: 102516
-log size: 45, duration: 102599
-log size: 46, duration: 102631
-log size: 47, duration: 101625
-log size: 48, duration: 102534
-log size: 49, duration: 101863
-log size: 50, duration: 101575
-log size: 51, duration: 101465
-log size: 52, duration: 102419
-log size: 53, duration: 103564
-log size: 54, duration: 101564
-log size: 55, duration: 101545
-log size: 56, duration: 102476
-log size: 57, duration: 102294
-log size: 58, duration: 101354
-log size: 59, duration: 102573
-log size: 60, duration: 101498
-log size: 61, duration: 102714
-log size: 62, duration: 102721
-log size: 63, duration: 101531
-log size: 64, duration: 102704
-log size: 65, duration: 101048
-log size: 66, duration: 102677
-log size: 67, duration: 102558
-log size: 68, duration: 101399
-log size: 69, duration: 103539
-log size: 70, duration: 102559
-log size: 71, duration: 101511
-log size: 72, duration: 102476
-log size: 73, duration: 101336
-log size: 74, duration: 103535
-log size: 75, duration: 102354
-log size: 76, duration: 102474
-log size: 77, duration: 102613
-log size: 78, duration: 101416
-log size: 79, duration: 102629
-log size: 80, duration: 101333
-log size: 81, duration: 70179
-log size: 82, duration: 105834
-log size: 83, duration: 105444
-log size: 84, duration: 105672
-log size: 85, duration: 105690
-log size: 86, duration: 106144
-log size: 87, duration: 106853
-log size: 88, duration: 105478
-log size: 89, duration: 104681
-log size: 90, duration: 106662
-log size: 91, duration: 106688
-log size: 92, duration: 105728
-log size: 93, duration: 105936
-log size: 94, duration: 104879
-log size: 95, duration: 106925
-log size: 96, duration: 105854
-log size: 97, duration: 105775
-log size: 98, duration: 105720
-log size: 99, duration: 106908
-log size: 100, duration: 105740
-log size: 101, duration: 105744
-log size: 102, duration: 106533
-log size: 103, duration: 105958
-log size: 104, duration: 108074
-log size: 105, duration: 105991
-log size: 106, duration: 105714
-log size: 107, duration: 105620
-log size: 108, duration: 106629
-log size: 109, duration: 108220
-log size: 110, duration: 105727
-log size: 111, duration: 106940
-log size: 112, duration: 105537
-log size: 113, duration: 106949
-log size: 114, duration: 105765
-log size: 115, duration: 108024
-log size: 116, duration: 107086
-log size: 117, duration: 106871
-log size: 118, duration: 107127
-log size: 119, duration: 105864
-log size: 120, duration: 107051
-log size: 121, duration: 106921
-log size: 122, duration: 105864
-log size: 123, duration: 106883
-log size: 124, duration: 108062
-log size: 125, duration: 107057
-log size: 126, duration: 107017
-log size: 127, duration: 106940
-log size: 128, duration: 107138
-log size: 129, duration: 107886
-log size: 130, duration: 108053
-log size: 131, duration: 108065
-log size: 132, duration: 106947
-log size: 133, duration: 107975
-log size: 134, duration: 107073
-log size: 135, duration: 106855
-log size: 136, duration: 107750
-log size: 137, duration: 107146
-log size: 138, duration: 109114
-log size: 139, duration: 106977
-log size: 140, duration: 107856
-log size: 141, duration: 106937
-log size: 142, duration: 107869
-log size: 143, duration: 109355
-log size: 144, duration: 106697
-log size: 145, duration: 108007
-log size: 146, duration: 107970
-log size: 147, duration: 106854
-log size: 148, duration: 110146
-log size: 149, duration: 108047
-log size: 150, duration: 107070
-log size: 151, duration: 109014
-log size: 152, duration: 107904
-log size: 153, duration: 107801
-log size: 154, duration: 107982
-log size: 155, duration: 109193
-log size: 156, duration: 108080
-log size: 157, duration: 107868
-log size: 158, duration: 109024
-log size: 159, duration: 107725
-log size: 160, duration: 109159
-log size: 161, duration: 109252
-log size: 162, duration: 108034
-log size: 163, duration: 108176
-log size: 164, duration: 109012
-log size: 165, duration: 108134
-log size: 166, duration: 108971
-log size: 167, duration: 109070
-log size: 168, duration: 108047
-log size: 169, duration: 108943
-log size: 170, duration: 109020
-log size: 171, duration: 109075
-log size: 172, duration: 110265
-log size: 173, duration: 107871
-log size: 174, duration: 108898
-log size: 175, duration: 109177
-log size: 176, duration: 110393
-log size: 177, duration: 108133
-log size: 178, duration: 109108
-log size: 179, duration: 110335
-log size: 180, duration: 109270
-log size: 181, duration: 109229
-log size: 182, duration: 109461
-log size: 183, duration: 108146
-log size: 184, duration: 109338
-log size: 185, duration: 109146
-log size: 186, duration: 110267
-log size: 187, duration: 108828
-log size: 188, duration: 109085
-log size: 189, duration: 106594
-log size: 190, duration: 112741
-log size: 191, duration: 110998
-log size: 192, duration: 109996
-log size: 193, duration: 109497
-log size: 194, duration: 110135
-log size: 195, duration: 110149
-log size: 196, duration: 110250
-log size: 197, duration: 110007
-log size: 198, duration: 110418
-log size: 199, duration: 109411
-log size: 200, duration: 110376
+95546
+102668
+102317
+102032
+102228
+102510
+102506
+101118
+102401
+103457
+101159
+102290
+102263
+102542
+101156
+102825
+102532
+101403
+103464
+101111
+102312
+102298
+103412
+101368
+101265
+102947
+100962
+102546
+102154
+102468
+102075
+102660
+101795
+101550
+103142
+102336
+100961
+102512
+101743
+102491
+101298
+102685
+102099
+103338
+101759
+101908
+102517
+101529
+101890
+102426
+102299
+101985
+101350
+103574
+101652
+102533
+101308
+102612
+102494
+82679
+104638
+104464
+105414
+104444
+105008
+106595
+104895
+102658
+105019
+104759
+104770
+104747
+106063
+104702
+104666
+105889
+104867
+104657
+104790
+105807
+106847
+104605
+105758
+105835
+105823
+105787
+104704
+106474
+105562
+105904
+106909
+104689
+105824
+106871
+105671
+105368
+106745
+105921
+105880
+106674
+105751
+106911
+105656
+105542
+107044
+106901
+106145
+105607
+107027
+105800
+108071
+105935
+107005
+105772
+107074
+107043
+105834
+108039
+106618
+106005
+107997
+107070
+107096
+106913
+106891
+107105
+107194
+107097
+108019
+107979
+107911
+106891
+107057
+107998
+106888
+106951
+108157
+108187
+108157
+107173
+107129
+108356
+108238
+106943
+108132
+106944
+107922
+108980
+107950
+108182
+108180
+108156
+108150
+108167
+108265
+104849
+109440
+109345
+109321
+107074
+109319
+108076
+107925
+110150
+108071
+108088
+105962
+111441
+109964
+108613
+108040
+110264
+104634
+113744
+108128
+109306
+109469
+109292
+104799
+112427
+110331
+108262
+110113
+109170
+109206
+109414
+109055
+109276
+107056
+113806
+109198
+109011
+110574
+109037
+107054
+112506
+110307
+109332
+110553
+109396

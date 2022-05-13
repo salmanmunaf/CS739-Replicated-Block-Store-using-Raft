@@ -1,200 +1,200 @@
-log size: 1, duration: 1303
-log size: 2, duration: 1615
-log size: 3, duration: 1599
-log size: 4, duration: 1609
-log size: 5, duration: 1612
-log size: 6, duration: 1610
-log size: 7, duration: 1430
-log size: 8, duration: 1594
-log size: 9, duration: 1634
-log size: 10, duration: 1573
-log size: 11, duration: 1584
-log size: 12, duration: 1589
-log size: 13, duration: 1598
-log size: 14, duration: 1587
-log size: 15, duration: 1607
-log size: 16, duration: 1580
-log size: 17, duration: 1548
-log size: 18, duration: 1625
-log size: 19, duration: 1574
-log size: 20, duration: 1453
-log size: 21, duration: 1568
-log size: 22, duration: 1621
-log size: 23, duration: 1589
-log size: 24, duration: 1682
-log size: 25, duration: 1574
-log size: 26, duration: 1563
-log size: 27, duration: 1629
-log size: 28, duration: 1614
-log size: 29, duration: 1586
-log size: 30, duration: 1570
-log size: 31, duration: 1598
-log size: 32, duration: 1562
-log size: 33, duration: 1627
-log size: 34, duration: 1571
-log size: 35, duration: 1595
-log size: 36, duration: 1559
-log size: 37, duration: 1593
-log size: 38, duration: 1569
-log size: 39, duration: 1639
-log size: 40, duration: 1556
-log size: 41, duration: 1597
-log size: 42, duration: 1571
-log size: 43, duration: 1641
-log size: 44, duration: 1431
-log size: 45, duration: 1562
-log size: 46, duration: 1597
-log size: 47, duration: 1568
-log size: 48, duration: 1589
-log size: 49, duration: 1589
-log size: 50, duration: 1587
-log size: 51, duration: 1616
-log size: 52, duration: 1450
-log size: 53, duration: 1574
-log size: 54, duration: 1643
-log size: 55, duration: 1598
-log size: 56, duration: 1579
-log size: 57, duration: 1611
-log size: 58, duration: 1628
-log size: 59, duration: 1592
-log size: 60, duration: 1545
-log size: 61, duration: 1589
-log size: 62, duration: 1586
-log size: 63, duration: 1585
-log size: 64, duration: 1556
-log size: 65, duration: 1583
-log size: 66, duration: 1591
-log size: 67, duration: 1556
-log size: 68, duration: 1286
-log size: 69, duration: 1434
-log size: 70, duration: 1563
-log size: 71, duration: 1591
-log size: 72, duration: 1578
-log size: 73, duration: 1682
-log size: 74, duration: 1269
-log size: 75, duration: 1589
-log size: 76, duration: 1555
-log size: 77, duration: 1592
-log size: 78, duration: 1566
-log size: 79, duration: 1435
-log size: 80, duration: 1599
-log size: 81, duration: 1627
-log size: 82, duration: 1627
-log size: 83, duration: 1562
-log size: 84, duration: 1582
-log size: 85, duration: 1600
-log size: 86, duration: 1558
-log size: 87, duration: 1440
-log size: 88, duration: 1598
-log size: 89, duration: 1264
-log size: 90, duration: 1574
-log size: 91, duration: 1618
-log size: 92, duration: 1573
-log size: 93, duration: 1607
-log size: 94, duration: 1348
-log size: 95, duration: 1462
-log size: 96, duration: 1616
-log size: 97, duration: 1631
-log size: 98, duration: 1549
-log size: 99, duration: 1646
-log size: 100, duration: 1567
-log size: 101, duration: 1587
-log size: 102, duration: 1544
-log size: 103, duration: 1578
-log size: 104, duration: 1562
-log size: 105, duration: 1583
-log size: 106, duration: 1611
-log size: 107, duration: 1545
-log size: 108, duration: 1616
-log size: 109, duration: 1552
-log size: 110, duration: 1590
-log size: 111, duration: 1559
-log size: 112, duration: 1605
-log size: 113, duration: 1594
-log size: 114, duration: 1573
-log size: 115, duration: 1584
-log size: 116, duration: 1560
-log size: 117, duration: 1624
-log size: 118, duration: 1558
-log size: 119, duration: 1588
-log size: 120, duration: 1596
-log size: 121, duration: 1550
-log size: 122, duration: 1605
-log size: 123, duration: 1595
-log size: 124, duration: 1584
-log size: 125, duration: 1605
-log size: 126, duration: 1598
-log size: 127, duration: 1632
-log size: 128, duration: 1578
-log size: 129, duration: 1570
-log size: 130, duration: 1592
-log size: 131, duration: 1424
-log size: 132, duration: 1635
-log size: 133, duration: 1546
-log size: 134, duration: 1586
-log size: 135, duration: 1585
-log size: 136, duration: 1593
-log size: 137, duration: 1552
-log size: 138, duration: 1660
-log size: 139, duration: 1622
-log size: 140, duration: 1573
-log size: 141, duration: 1580
-log size: 142, duration: 1618
-log size: 143, duration: 1587
-log size: 144, duration: 1644
-log size: 145, duration: 1567
-log size: 146, duration: 1600
-log size: 147, duration: 1577
-log size: 148, duration: 1607
-log size: 149, duration: 1557
-log size: 150, duration: 1572
-log size: 151, duration: 1558
-log size: 152, duration: 1582
-log size: 153, duration: 1606
-log size: 154, duration: 1590
-log size: 155, duration: 1574
-log size: 156, duration: 1577
-log size: 157, duration: 1614
-log size: 158, duration: 1586
-log size: 159, duration: 1556
-log size: 160, duration: 1589
-log size: 161, duration: 1560
-log size: 162, duration: 1628
-log size: 163, duration: 1463
-log size: 164, duration: 1560
-log size: 165, duration: 1423
-log size: 166, duration: 1567
-log size: 167, duration: 1585
-log size: 168, duration: 1631
-log size: 169, duration: 1624
-log size: 170, duration: 1582
-log size: 171, duration: 1581
-log size: 172, duration: 1594
-log size: 173, duration: 1571
-log size: 174, duration: 1587
-log size: 175, duration: 1564
-log size: 176, duration: 1570
-log size: 177, duration: 1311
-log size: 178, duration: 1452
-log size: 179, duration: 1573
-log size: 180, duration: 1617
-log size: 181, duration: 1605
-log size: 182, duration: 1588
-log size: 183, duration: 1654
-log size: 184, duration: 1561
-log size: 185, duration: 1639
-log size: 186, duration: 1566
-log size: 187, duration: 1675
-log size: 188, duration: 1568
-log size: 189, duration: 1685
-log size: 190, duration: 1560
-log size: 191, duration: 1404
-log size: 192, duration: 1584
-log size: 193, duration: 1562
-log size: 194, duration: 1634
-log size: 195, duration: 1576
-log size: 196, duration: 1575
-log size: 197, duration: 1556
-log size: 198, duration: 1628
-log size: 199, duration: 1597
-log size: 200, duration: 1620
+1381
+1625
+1603
+1320
+1574
+1613
+1596
+1638
+1484
+1422
+1447
+1441
+1615
+1624
+1625
+1606
+1576
+1626
+1596
+1623
+1581
+1617
+1433
+1639
+1600
+1662
+1592
+1617
+1675
+1596
+1611
+1572
+1495
+1293
+1605
+1587
+1621
+1586
+1667
+1588
+1635
+1257
+1655
+1624
+1432
+1648
+1602
+1299
+1324
+1572
+1608
+1610
+1390
+1662
+1605
+1639
+1281
+1323
+1611
+1357
+1544
+1581
+1417
+1558
+1416
+1539
+1596
+1590
+1457
+1599
+1602
+1617
+1663
+1605
+1587
+1650
+1636
+1554
+1681
+1587
+1619
+1588
+1587
+1466
+1563
+1513
+1608
+1633
+1581
+1554
+1426
+1558
+1619
+1579
+1633
+1594
+1636
+1412
+1635
+1586
+1601
+1611
+1637
+1591
+1555
+1619
+1562
+1620
+1600
+1573
+1625
+1652
+1586
+1689
+1458
+1548
+1585
+1651
+1579
+1572
+1597
+1597
+1591
+1655
+1743
+1624
+1598
+1629
+1673
+1595
+1581
+1586
+1635
+1561
+1609
+1580
+1583
+1614
+1621
+1587
+1641
+1584
+1636
+1682
+1555
+1581
+1568
+1627
+1569
+1584
+1626
+1587
+1620
+1591
+1584
+1639
+1603
+1614
+1517
+1648
+1591
+1596
+1640
+1604
+1582
+1586
+1584
+1620
+1560
+1586
+1595
+1469
+1722
+1651
+1629
+1602
+1605
+1682
+1443
+1598
+1584
+1582
+1577
+1590
+1545
+1608
+1593
+1622
+1444
+1631
+1634
+1562
+1632
+1566
+1320
+1660
+1580
+1624
+1596
+1617

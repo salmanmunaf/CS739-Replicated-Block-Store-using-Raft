@@ -154,8 +154,9 @@ void do_read(std::vector<RBSClient> &serverArr, off_t offset, ostream& output) {
         auto ts_read_end = std::chrono::steady_clock::now();
 
         if (result == BLOCKSTORE_SUCCESS) {
-          output << "log size: " << log_size <<   ", duration: " << std::chrono::duration_cast<std::chrono::microseconds>(ts_read_end - ts_read_start).count() << std::endl;
-        }
+          //output << "log size: " << log_size <<   ", duration: " << std::chrono::duration_cast<std::chrono::microseconds>(ts_read_end - ts_read_start).count() << std::endl;
+        output << std::chrono::duration_cast<std::chrono::microseconds>(ts_read_end - ts_read_start).count() << std::endl;
+	}
 
         // If we couldn't communicate with the given server, increment the primary
         if (result == -1) {
@@ -187,7 +188,8 @@ void do_write(std::vector<RBSClient> &serverArr, off_t offset, std::string str, 
         auto ts_write_end = std::chrono::steady_clock::now();
 
         if (result == BLOCKSTORE_SUCCESS) {
-          output << "log size: " << log_size <<   ", duration: " << std::chrono::duration_cast<std::chrono::microseconds>(ts_write_end - ts_write_start).count() << std::endl;
+          //output << "log size: " << log_size <<   ", duration: " << std::chrono::duration_cast<std::chrono::microseconds>(ts_write_end - ts_write_start).count() << std::endl;
+	  output << std::chrono::duration_cast<std::chrono::microseconds>(ts_write_end - ts_write_start).count() << std::endl;
         }
 
         // If we couldn't communicate with the given server, increment the primary

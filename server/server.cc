@@ -933,6 +933,13 @@ out:
         // vote_lock.unlock();
 
         state = STATE_FOLLOWER;
+	if(current_leader_id != leaderId) {
+
+		current_leader_id = leaderId;
+
+		std::cout<<"Leader updated to: "<<current_leader_id<<std::endl;
+
+	}
 
         reply->set_term(curTerm);
         reply->set_success(true);
